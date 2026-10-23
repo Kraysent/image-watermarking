@@ -32,9 +32,10 @@ class DemoSession:
 
 
 def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSession:
-    checkpoint_path = checkpoint_dir / run_id / "last.pt"
-    if not checkpoint_path.is_file():
-        raise FileNotFoundError(f"checkpoint not found: {checkpoint_path}")
+    run_dir = checkpoint_dir / run_id
+    checkpoint_path = _latest_checkpoint_path(run_dir)
+    if checkpoint_path is None:
+        raise FileNotFoundError(f"checkpoint not found in: {run_dir}")
 
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     train_cfg = OmegaConf.create(checkpoint["config"])
@@ -60,6 +61,17 @@ def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSessi
         device=torch_device,
         run_id=run_id,
     )
+
+
+def _latest_checkpoint_path(run_dir: Path) -> Path | None:
+    checkpoints = list(run_dir.glob("epoch_*.pt"))
+    if not checkpoints:
+        return None
+
+    def epoch_number(path: Path) -> int:
+        return int(path.stem.removeprefix("epoch_"))
+
+    return max(checkpoints, key=epoch_number)
 
 
 def pil_to_tensor(image: PIL.Image.Image, image_size: int) -> torch.Tensor:

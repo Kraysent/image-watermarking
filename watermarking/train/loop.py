@@ -193,7 +193,7 @@ def _save_checkpoint(
     global_step: int,
     run_id: str,
 ) -> None:
-    checkpoint_path = checkpoint_dir / "last.pt"
+    checkpoint_path = checkpoint_dir / f"epoch_{finished_epoch}.pt"
     torch.save(
         {
             "encoder": encoder.state_dict(),

@@ -91,12 +91,13 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
 
     run_id = next(line.removeprefix("run_id=") for line in result.output.splitlines() if line.startswith("run_id="))
-    checkpoint_path = checkpoint_dir / run_id / "last.pt"
+    checkpoint_path = checkpoint_dir / run_id / "epoch_1.pt"
     assert checkpoint_path.is_file()
     assert "checkpoint=" in result.output
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert set(checkpoint) >= {"encoder", "decoder", "optimizer", "config", "epoch", "global_step", "run_id"}
     assert checkpoint["run_id"] == run_id
+    assert checkpoint["epoch"] == 1
 
     mlflow.set_tracking_uri(tracking_uri)
     run = mlflow.get_run(run_id)
@@ -108,5 +109,5 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert "eval/message_accuracy" in run.data.metrics
     assert "eval/psnr" in run.data.metrics
     assert "eval/ssim" in run.data.metrics
-    artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="last.pt"))
+    artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="epoch_1.pt"))
     assert artifact_path.is_file()
