@@ -4,4 +4,5 @@ defaults:
   - decoder: dev
   - train: dev
   - loss: dev
+  - mlflow: dev
   - _self_

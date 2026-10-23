@@ -3,3 +3,4 @@ lr: 0.001
 seed: 0
 device: cpu
 max_steps: null
+checkpoint_dir: outputs/checkpoints

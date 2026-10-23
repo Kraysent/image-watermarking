@@ -2,8 +2,10 @@ from pathlib import Path
 
 import click.testing
 import hydra
+import mlflow
 import PIL.Image
 import polars
+import torch
 
 import watermarking.cli as cli_module
 import watermarking.train.cli as train_cli
@@ -41,6 +43,9 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
 
     dataset_path = tmp_path / "dataset.parquet"
     polars.DataFrame({"relative_path": ["sample.png"], "split": ["train"]}).write_parquet(dataset_path)
+    checkpoint_dir = tmp_path / "outputs" / "checkpoints"
+    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
+    artifact_root = tmp_path / "outputs" / "mlartifacts"
 
     runner = click.testing.CliRunner()
     result = runner.invoke(
@@ -56,7 +61,24 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
             "decoder.channels=[4]",
             "train.max_steps=1",
             "train.device=cpu",
+            f"train.checkpoint_dir={checkpoint_dir}",
+            f"mlflow.tracking_uri={tracking_uri}",
+            f"mlflow.artifact_root={artifact_root}",
+            "mlflow.experiment_name=test",
         ],
     )
     assert result.exit_code == 0, result.output
     assert "epoch=1" in result.output
+    assert "run_id=" in result.output
+
+    run_id = next(line.removeprefix("run_id=") for line in result.output.splitlines() if line.startswith("run_id="))
+    checkpoint_path = checkpoint_dir / run_id / "last.pt"
+    assert checkpoint_path.is_file()
+    assert "checkpoint=" in result.output
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    assert set(checkpoint) >= {"encoder", "decoder", "optimizer", "config", "epoch", "global_step", "run_id"}
+    assert checkpoint["run_id"] == run_id
+
+    mlflow.set_tracking_uri(tracking_uri)
+    artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="last.pt"))
+    assert artifact_path.is_file()

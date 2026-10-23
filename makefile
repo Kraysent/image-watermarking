@@ -69,3 +69,6 @@ update-template:
 		--skip-answered \
 		--conflict inline \
 		--answers-file .template.yaml
+
+ui:
+	uv run mlflow ui --backend-store-uri sqlite:///outputs/mlflow.db
