@@ -1,7 +1,7 @@
 defaults:
   - data: dev
-  - encoder: dev
-  - decoder: dev
+  - encoder: small
+  - decoder: small
   - train: dev
   - loss: dev
   - eval: dev
