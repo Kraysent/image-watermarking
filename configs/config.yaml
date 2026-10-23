@@ -1,0 +1,7 @@
+defaults:
+  - data: dev
+  - encoder: dev
+  - decoder: dev
+  - train: dev
+  - loss: dev
+  - _self_
