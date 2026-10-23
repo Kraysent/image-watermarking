@@ -34,12 +34,14 @@ def test_hydra_overrides_compose() -> None:
                 "decoder.channels=[8]",
                 "train.epochs=3",
                 "loss.w_img=2.5",
+                "loss.image_loss_type=ssim",
             ],
         )
     assert cfg.train.epochs == 3
     assert list(cfg.encoder.channels) == [32, 64]
     assert list(cfg.decoder.channels) == [8]
     assert cfg.loss.w_img == 2.5
+    assert cfg.loss.image_loss_type == "ssim"
 
 
 def test_hydra_test_config_compose() -> None:
@@ -101,6 +103,8 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
 
     mlflow.set_tracking_uri(tracking_uri)
     run = mlflow.get_run(run_id)
+    assert "command" in run.data.params
+    assert run.data.params["command"]
     assert "eval/loss" in run.data.metrics
     assert "eval/message_loss" in run.data.metrics
     assert "eval/image_loss" in run.data.metrics

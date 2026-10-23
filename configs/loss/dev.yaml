@@ -1,2 +1,3 @@
-w_msg: 200.0
-w_img: 0
+w_msg: 2.0
+w_img: 1.0
+image_loss_type: mse

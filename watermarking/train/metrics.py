@@ -7,6 +7,21 @@ def message_accuracy(prediction: torch.Tensor, message: torch.Tensor) -> torch.T
     return (predicted == message).all(dim=-1).float()
 
 
+def image_loss(
+    cover: torch.Tensor,
+    watermarked: torch.Tensor,
+    diff: torch.Tensor,
+    loss_type: str,
+) -> torch.Tensor:
+    if loss_type == "mse":
+        return functional.mse_loss(diff, torch.zeros_like(diff))
+    if loss_type == "ssim":
+        return (1.0 - ssim(cover, watermarked)).mean()
+    if loss_type == "psnr":
+        return (-psnr(cover, watermarked)).mean()
+    raise ValueError(f"unknown image_loss_type: {loss_type}")
+
+
 def psnr(cover: torch.Tensor, watermarked: torch.Tensor) -> torch.Tensor:
     mse = ((cover - watermarked) ** 2).flatten(1).mean(dim=1).clamp(min=1e-10)
     return 10.0 * torch.log10(1.0 / mse)

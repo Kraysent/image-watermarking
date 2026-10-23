@@ -1,3 +1,5 @@
+import shlex
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -20,7 +22,12 @@ def train(cfg: DictConfig) -> str:
     with mlflow.start_run(log_system_metrics=True) as run:
         run_id = run.info.run_id
         print(f"run_id={run_id}")
-        mlflow.log_params(_flatten_params(OmegaConf.to_container(cfg, resolve=True)))
+        mlflow.log_params(
+            {
+                **_flatten_params(OmegaConf.to_container(cfg, resolve=True)),
+                "command": shlex.join(sys.argv),
+            }
+        )
 
         torch.manual_seed(cfg.train.seed)
         device = torch.device(cfg.train.device)
@@ -94,7 +101,12 @@ def train(cfg: DictConfig) -> str:
                     prediction = decoder(watermarked)
 
                     message_loss = functional.mse_loss(prediction, message)
-                    image_loss = functional.mse_loss(diff, torch.zeros_like(diff))
+                    image_loss = metrics.image_loss(
+                        image,
+                        watermarked,
+                        diff,
+                        cfg.loss.image_loss_type,
+                    )
                     loss = cfg.loss.w_msg * message_loss + cfg.loss.w_img * image_loss
                     bit_accuracy = ((prediction > 0.5) == message).float().mean()
 
@@ -127,6 +139,7 @@ def train(cfg: DictConfig) -> str:
                     device=device,
                     w_msg=float(cfg.loss.w_msg),
                     w_img=float(cfg.loss.w_img),
+                    image_loss_type=cfg.loss.image_loss_type,
                     seed=int(cfg.eval.seed),
                 )
                 mlflow.log_metrics(
@@ -218,6 +231,7 @@ def _evaluate_epoch(
     device: torch.device,
     w_msg: float,
     w_img: float,
+    image_loss_type: str,
     seed: int,
 ) -> dict[str, float]:
     encoder.eval()
@@ -241,7 +255,7 @@ def _evaluate_epoch(
             watermarked = (image + diff).clamp(0.0, 1.0)
             prediction = decoder(watermarked)
             message_loss = functional.mse_loss(prediction, message)
-            image_loss = functional.mse_loss(diff, torch.zeros_like(diff))
+            image_loss = metrics.image_loss(image, watermarked, diff, image_loss_type)
             loss = w_msg * message_loss + w_img * image_loss
             bit_accuracy = ((prediction > 0.5) == message).float().mean()
             batch_size = image.shape[0]
