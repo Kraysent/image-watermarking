@@ -17,7 +17,7 @@ def train(cfg: DictConfig) -> str:
     mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
     _ensure_experiment(cfg.mlflow.experiment_name, Path(cfg.mlflow.artifact_root))
 
-    with mlflow.start_run() as run:
+    with mlflow.start_run(log_system_metrics=True) as run:
         run_id = run.info.run_id
         print(f"run_id={run_id}")
         mlflow.log_params(_flatten_params(OmegaConf.to_container(cfg, resolve=True)))
