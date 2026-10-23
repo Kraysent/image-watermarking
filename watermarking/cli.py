@@ -1,6 +1,7 @@
 import click
 
 import watermarking.data.cli as data_cli
+import watermarking.eval.cli as eval_cli
 import watermarking.train.cli as train_cli
 
 
@@ -11,3 +12,4 @@ def cli() -> None:
 
 cli.add_command(data_cli.ingest)
 cli.add_command(train_cli.train)
+cli.add_command(eval_cli.evaluate)
