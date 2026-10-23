@@ -2,8 +2,6 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import mlflow
-import numpy as np
-import PIL.Image
 import torch
 import torch.nn.functional as functional
 import torch.utils.data
@@ -72,7 +70,6 @@ def train(cfg: DictConfig) -> str:
         max_steps = cfg.train.max_steps
         global_step = 0
         finished_epoch = 0
-        sample_indices = _sample_indices(len(eval_dataset), cfg.eval.n_images, cfg.eval.seed)
 
         for epoch in range(cfg.train.epochs):
             encoder.train()
@@ -80,6 +77,7 @@ def train(cfg: DictConfig) -> str:
             epoch_message_loss = 0.0
             epoch_image_loss = 0.0
             epoch_total_loss = 0.0
+            epoch_bit_accuracy = 0.0
             steps = 0
 
             for image, message in train_loader:
@@ -93,6 +91,7 @@ def train(cfg: DictConfig) -> str:
                 message_loss = functional.mse_loss(prediction, message)
                 image_loss = functional.mse_loss(diff, torch.zeros_like(diff))
                 loss = cfg.loss.w_msg * message_loss + cfg.loss.w_img * image_loss
+                bit_accuracy = ((prediction > 0.5) == message).float().mean()
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -101,6 +100,7 @@ def train(cfg: DictConfig) -> str:
                 epoch_message_loss += message_loss.item()
                 epoch_image_loss += image_loss.item()
                 epoch_total_loss += loss.item()
+                epoch_bit_accuracy += bit_accuracy.item()
                 steps += 1
                 global_step += 1
 
@@ -114,24 +114,22 @@ def train(cfg: DictConfig) -> str:
             mean_loss = epoch_total_loss / steps
             mean_message_loss = epoch_message_loss / steps
             mean_image_loss = epoch_image_loss / steps
+            mean_bit_accuracy = epoch_bit_accuracy / steps
             eval_metrics = _evaluate_epoch(
                 encoder=encoder,
                 decoder=decoder,
                 loader=eval_loader,
-                dataset=eval_dataset,
-                sample_indices=sample_indices,
                 device=device,
-                residual_scale=float(cfg.encoder.residual_scale),
                 w_msg=float(cfg.loss.w_msg),
                 w_img=float(cfg.loss.w_img),
                 seed=int(cfg.eval.seed),
-                step=finished_epoch,
             )
             mlflow.log_metrics(
                 {
                     "loss": mean_loss,
                     "message_loss": mean_message_loss,
                     "image_loss": mean_image_loss,
+                    "bit_accuracy": mean_bit_accuracy,
                     **eval_metrics,
                 },
                 step=finished_epoch,
@@ -141,9 +139,11 @@ def train(cfg: DictConfig) -> str:
                 f"loss={mean_loss:.6f} "
                 f"message_loss={mean_message_loss:.6f} "
                 f"image_loss={mean_image_loss:.6f} "
+                f"bit_accuracy={mean_bit_accuracy:.6f} "
                 f"eval_loss={eval_metrics['eval_loss']:.6f} "
                 f"eval_message_loss={eval_metrics['eval_message_loss']:.6f} "
-                f"eval_image_loss={eval_metrics['eval_image_loss']:.6f}"
+                f"eval_image_loss={eval_metrics['eval_image_loss']:.6f} "
+                f"eval_bit_accuracy={eval_metrics['eval_bit_accuracy']:.6f}"
             )
 
             if max_steps is not None and global_step >= max_steps:
@@ -174,14 +174,10 @@ def _evaluate_epoch(
     encoder: models.Encoder,
     decoder: models.Decoder,
     loader: torch.utils.data.DataLoader[tuple[torch.Tensor, torch.Tensor]],
-    dataset: dataset_module.WatermarkDataset,
-    sample_indices: list[int],
     device: torch.device,
-    residual_scale: float,
     w_msg: float,
     w_img: float,
     seed: int,
-    step: int,
 ) -> dict[str, float]:
     encoder.eval()
     decoder.eval()
@@ -189,6 +185,7 @@ def _evaluate_epoch(
     total_message_loss = 0.0
     total_image_loss = 0.0
     total_loss = 0.0
+    total_bit_accuracy = 0.0
     steps = 0
 
     with torch.no_grad():
@@ -201,40 +198,19 @@ def _evaluate_epoch(
             message_loss = functional.mse_loss(prediction, message)
             image_loss = functional.mse_loss(diff, torch.zeros_like(diff))
             loss = w_msg * message_loss + w_img * image_loss
+            bit_accuracy = ((prediction > 0.5) == message).float().mean()
             total_message_loss += message_loss.item()
             total_image_loss += image_loss.item()
             total_loss += loss.item()
+            total_bit_accuracy += bit_accuracy.item()
             steps += 1
-
-        for sample_index, dataset_index in enumerate(sample_indices):
-            image, message = dataset[dataset_index]
-            image_batch = image.unsqueeze(0).to(device)
-            message_batch = message.unsqueeze(0).to(device)
-            diff = encoder(image_batch, message_batch)
-            watermarked = (image_batch + diff).clamp(0.0, 1.0)
-            amplified = (0.5 + diff / (2.0 * residual_scale)).clamp(0.0, 1.0)
-            grid = _side_by_side(image_batch[0], watermarked[0], amplified[0])
-            mlflow.log_image(grid, key=f"eval/sample_{sample_index:02d}", step=step)
 
     return {
         "eval_loss": total_loss / steps,
         "eval_message_loss": total_message_loss / steps,
         "eval_image_loss": total_image_loss / steps,
+        "eval_bit_accuracy": total_bit_accuracy / steps,
     }
-
-
-def _sample_indices(dataset_size: int, n_images: int, seed: int) -> list[int]:
-    count = min(n_images, dataset_size)
-    generator = torch.Generator().manual_seed(seed)
-    return torch.randperm(dataset_size, generator=generator)[:count].tolist()
-
-
-def _side_by_side(*images: torch.Tensor) -> PIL.Image.Image:
-    arrays = [
-        (image.detach().cpu().permute(1, 2, 0).numpy() * 255.0).round().clip(0, 255).astype(np.uint8)
-        for image in images
-    ]
-    return PIL.Image.fromarray(np.concatenate(arrays, axis=1))
 
 
 def _prepare_output_dirs(cfg: DictConfig) -> None:

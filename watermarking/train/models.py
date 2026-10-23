@@ -30,7 +30,7 @@ class Encoder(nn.Module):
 
     def forward(self, image: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
         batch, _, height, width = image.shape
-        message_map = message.view(batch, -1, 1, 1).expand(-1, -1, height, width)
+        message_map = (2.0 * message - 1.0).view(batch, -1, 1, 1).expand(-1, -1, height, width)
         return self.residual_scale * self.net(torch.cat([image, message_map], dim=1))
 
 

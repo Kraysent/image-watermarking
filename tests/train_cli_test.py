@@ -73,7 +73,6 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
             "decoder.channels=[4]",
             "train.max_steps=1",
             "train.device=cpu",
-            "eval.n_images=1",
             f"train.checkpoint_dir={checkpoint_dir}",
             f"mlflow.tracking_uri={tracking_uri}",
             f"mlflow.artifact_root={artifact_root}",
@@ -83,6 +82,8 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     assert "epoch=1" in result.output
     assert "eval_loss=" in result.output
+    assert "bit_accuracy=" in result.output
+    assert "eval_bit_accuracy=" in result.output
     assert "run_id=" in result.output
 
     run_id = next(line.removeprefix("run_id=") for line in result.output.splitlines() if line.startswith("run_id="))
@@ -98,5 +99,7 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert "eval_loss" in run.data.metrics
     assert "eval_message_loss" in run.data.metrics
     assert "eval_image_loss" in run.data.metrics
+    assert "bit_accuracy" in run.data.metrics
+    assert "eval_bit_accuracy" in run.data.metrics
     artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="last.pt"))
     assert artifact_path.is_file()

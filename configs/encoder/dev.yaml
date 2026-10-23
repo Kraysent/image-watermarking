@@ -1,2 +1,2 @@
-channels: [16]
+channels: [32]
 residual_scale: 0.5
