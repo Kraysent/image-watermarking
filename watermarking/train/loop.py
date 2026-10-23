@@ -126,24 +126,24 @@ def train(cfg: DictConfig) -> str:
             )
             mlflow.log_metrics(
                 {
-                    "loss": mean_loss,
-                    "message_loss": mean_message_loss,
-                    "image_loss": mean_image_loss,
-                    "bit_accuracy": mean_bit_accuracy,
+                    "train/loss": mean_loss,
+                    "train/message_loss": mean_message_loss,
+                    "train/image_loss": mean_image_loss,
+                    "train/bit_accuracy": mean_bit_accuracy,
                     **eval_metrics,
                 },
                 step=finished_epoch,
             )
             print(
                 f"epoch={finished_epoch} "
-                f"loss={mean_loss:.6f} "
-                f"message_loss={mean_message_loss:.6f} "
-                f"image_loss={mean_image_loss:.6f} "
-                f"bit_accuracy={mean_bit_accuracy:.6f} "
-                f"eval_loss={eval_metrics['eval_loss']:.6f} "
-                f"eval_message_loss={eval_metrics['eval_message_loss']:.6f} "
-                f"eval_image_loss={eval_metrics['eval_image_loss']:.6f} "
-                f"eval_bit_accuracy={eval_metrics['eval_bit_accuracy']:.6f}"
+                f"train/loss={mean_loss:.6f} "
+                f"train/message_loss={mean_message_loss:.6f} "
+                f"train/image_loss={mean_image_loss:.6f} "
+                f"train/bit_accuracy={mean_bit_accuracy:.6f} "
+                f"eval/loss={eval_metrics['eval/loss']:.6f} "
+                f"eval/message_loss={eval_metrics['eval/message_loss']:.6f} "
+                f"eval/image_loss={eval_metrics['eval/image_loss']:.6f} "
+                f"eval/bit_accuracy={eval_metrics['eval/bit_accuracy']:.6f}"
             )
 
             if max_steps is not None and global_step >= max_steps:
@@ -206,10 +206,10 @@ def _evaluate_epoch(
             steps += 1
 
     return {
-        "eval_loss": total_loss / steps,
-        "eval_message_loss": total_message_loss / steps,
-        "eval_image_loss": total_image_loss / steps,
-        "eval_bit_accuracy": total_bit_accuracy / steps,
+        "eval/loss": total_loss / steps,
+        "eval/message_loss": total_message_loss / steps,
+        "eval/image_loss": total_image_loss / steps,
+        "eval/bit_accuracy": total_bit_accuracy / steps,
     }
 
 

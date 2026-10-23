@@ -81,9 +81,9 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "epoch=1" in result.output
-    assert "eval_loss=" in result.output
-    assert "bit_accuracy=" in result.output
-    assert "eval_bit_accuracy=" in result.output
+    assert "eval/loss=" in result.output
+    assert "train/bit_accuracy=" in result.output
+    assert "eval/bit_accuracy=" in result.output
     assert "run_id=" in result.output
 
     run_id = next(line.removeprefix("run_id=") for line in result.output.splitlines() if line.startswith("run_id="))
@@ -96,10 +96,10 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
 
     mlflow.set_tracking_uri(tracking_uri)
     run = mlflow.get_run(run_id)
-    assert "eval_loss" in run.data.metrics
-    assert "eval_message_loss" in run.data.metrics
-    assert "eval_image_loss" in run.data.metrics
-    assert "bit_accuracy" in run.data.metrics
-    assert "eval_bit_accuracy" in run.data.metrics
+    assert "eval/loss" in run.data.metrics
+    assert "eval/message_loss" in run.data.metrics
+    assert "eval/image_loss" in run.data.metrics
+    assert "train/bit_accuracy" in run.data.metrics
+    assert "eval/bit_accuracy" in run.data.metrics
     artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="last.pt"))
     assert artifact_path.is_file()
