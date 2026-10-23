@@ -8,6 +8,7 @@ import torch.utils.data
 from omegaconf import DictConfig, OmegaConf
 
 import watermarking.train.dataset as dataset_module
+import watermarking.train.metrics as metrics
 import watermarking.train.models as models
 
 
@@ -138,17 +139,7 @@ def train(cfg: DictConfig) -> str:
                     },
                     step=finished_epoch,
                 )
-                print(
-                    f"epoch={finished_epoch} "
-                    f"train/loss={mean_loss:.6f} "
-                    f"train/message_loss={mean_message_loss:.6f} "
-                    f"train/image_loss={mean_image_loss:.6f} "
-                    f"train/bit_accuracy={mean_bit_accuracy:.6f} "
-                    f"eval/loss={eval_metrics['eval/loss']:.6f} "
-                    f"eval/message_loss={eval_metrics['eval/message_loss']:.6f} "
-                    f"eval/image_loss={eval_metrics['eval/image_loss']:.6f} "
-                    f"eval/bit_accuracy={eval_metrics['eval/bit_accuracy']:.6f}"
-                )
+                print(f"epoch={finished_epoch} train/loss={mean_loss:.6f} eval/loss={eval_metrics['eval/loss']:.6f}")
 
                 if checkpoint_every is not None and finished_epoch % int(checkpoint_every) == 0:
                     _save_checkpoint(
@@ -236,6 +227,10 @@ def _evaluate_epoch(
     total_image_loss = 0.0
     total_loss = 0.0
     total_bit_accuracy = 0.0
+    total_message_accuracy = 0.0
+    total_psnr = 0.0
+    total_ssim = 0.0
+    total_samples = 0
     steps = 0
 
     with torch.no_grad():
@@ -249,10 +244,15 @@ def _evaluate_epoch(
             image_loss = functional.mse_loss(diff, torch.zeros_like(diff))
             loss = w_msg * message_loss + w_img * image_loss
             bit_accuracy = ((prediction > 0.5) == message).float().mean()
+            batch_size = image.shape[0]
             total_message_loss += message_loss.item()
             total_image_loss += image_loss.item()
             total_loss += loss.item()
             total_bit_accuracy += bit_accuracy.item()
+            total_message_accuracy += metrics.message_accuracy(prediction, message).sum().item()
+            total_psnr += metrics.psnr(image, watermarked).sum().item()
+            total_ssim += metrics.ssim(image, watermarked).sum().item()
+            total_samples += batch_size
             steps += 1
 
     return {
@@ -260,6 +260,9 @@ def _evaluate_epoch(
         "eval/message_loss": total_message_loss / steps,
         "eval/image_loss": total_image_loss / steps,
         "eval/bit_accuracy": total_bit_accuracy / steps,
+        "eval/message_accuracy": total_message_accuracy / total_samples,
+        "eval/psnr": total_psnr / total_samples,
+        "eval/ssim": total_ssim / total_samples,
     }
 
 

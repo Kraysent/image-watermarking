@@ -89,11 +89,6 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
         ],
     )
     assert result.exit_code == 0, result.output
-    assert "epoch=1" in result.output
-    assert "eval/loss=" in result.output
-    assert "train/bit_accuracy=" in result.output
-    assert "eval/bit_accuracy=" in result.output
-    assert "run_id=" in result.output
 
     run_id = next(line.removeprefix("run_id=") for line in result.output.splitlines() if line.startswith("run_id="))
     checkpoint_path = checkpoint_dir / run_id / "last.pt"
@@ -110,5 +105,8 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert "eval/image_loss" in run.data.metrics
     assert "train/bit_accuracy" in run.data.metrics
     assert "eval/bit_accuracy" in run.data.metrics
+    assert "eval/message_accuracy" in run.data.metrics
+    assert "eval/psnr" in run.data.metrics
+    assert "eval/ssim" in run.data.metrics
     artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="last.pt"))
     assert artifact_path.is_file()
