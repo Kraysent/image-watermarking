@@ -68,105 +68,155 @@ def train(cfg: DictConfig) -> str:
         )
 
         max_steps = cfg.train.max_steps
+        checkpoint_every = cfg.train.checkpoint_every
         global_step = 0
         finished_epoch = 0
+        checkpoint_dir = Path(cfg.train.checkpoint_dir) / run_id
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        for epoch in range(cfg.train.epochs):
-            encoder.train()
-            decoder.train()
-            epoch_message_loss = 0.0
-            epoch_image_loss = 0.0
-            epoch_total_loss = 0.0
-            epoch_bit_accuracy = 0.0
-            steps = 0
+        try:
+            for epoch in range(cfg.train.epochs):
+                encoder.train()
+                decoder.train()
+                epoch_message_loss = 0.0
+                epoch_image_loss = 0.0
+                epoch_total_loss = 0.0
+                epoch_bit_accuracy = 0.0
+                steps = 0
 
-            for image, message in train_loader:
-                image = image.to(device)
-                message = message.to(device)
+                for image, message in train_loader:
+                    image = image.to(device)
+                    message = message.to(device)
 
-                diff = encoder(image, message)
-                watermarked = (image + diff).clamp(0.0, 1.0)
-                prediction = decoder(watermarked)
+                    diff = encoder(image, message)
+                    watermarked = (image + diff).clamp(0.0, 1.0)
+                    prediction = decoder(watermarked)
 
-                message_loss = functional.mse_loss(prediction, message)
-                image_loss = functional.mse_loss(diff, torch.zeros_like(diff))
-                loss = cfg.loss.w_msg * message_loss + cfg.loss.w_img * image_loss
-                bit_accuracy = ((prediction > 0.5) == message).float().mean()
+                    message_loss = functional.mse_loss(prediction, message)
+                    image_loss = functional.mse_loss(diff, torch.zeros_like(diff))
+                    loss = cfg.loss.w_msg * message_loss + cfg.loss.w_img * image_loss
+                    bit_accuracy = ((prediction > 0.5) == message).float().mean()
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
 
-                epoch_message_loss += message_loss.item()
-                epoch_image_loss += image_loss.item()
-                epoch_total_loss += loss.item()
-                epoch_bit_accuracy += bit_accuracy.item()
-                steps += 1
-                global_step += 1
+                    epoch_message_loss += message_loss.item()
+                    epoch_image_loss += image_loss.item()
+                    epoch_total_loss += loss.item()
+                    epoch_bit_accuracy += bit_accuracy.item()
+                    steps += 1
+                    global_step += 1
+
+                    if max_steps is not None and global_step >= max_steps:
+                        break
+
+                if steps == 0:
+                    raise RuntimeError("train split is empty")
+
+                finished_epoch = epoch + 1
+                mean_loss = epoch_total_loss / steps
+                mean_message_loss = epoch_message_loss / steps
+                mean_image_loss = epoch_image_loss / steps
+                mean_bit_accuracy = epoch_bit_accuracy / steps
+                eval_metrics = _evaluate_epoch(
+                    encoder=encoder,
+                    decoder=decoder,
+                    loader=eval_loader,
+                    device=device,
+                    w_msg=float(cfg.loss.w_msg),
+                    w_img=float(cfg.loss.w_img),
+                    seed=int(cfg.eval.seed),
+                )
+                mlflow.log_metrics(
+                    {
+                        "train/loss": mean_loss,
+                        "train/message_loss": mean_message_loss,
+                        "train/image_loss": mean_image_loss,
+                        "train/bit_accuracy": mean_bit_accuracy,
+                        **eval_metrics,
+                    },
+                    step=finished_epoch,
+                )
+                print(
+                    f"epoch={finished_epoch} "
+                    f"train/loss={mean_loss:.6f} "
+                    f"train/message_loss={mean_message_loss:.6f} "
+                    f"train/image_loss={mean_image_loss:.6f} "
+                    f"train/bit_accuracy={mean_bit_accuracy:.6f} "
+                    f"eval/loss={eval_metrics['eval/loss']:.6f} "
+                    f"eval/message_loss={eval_metrics['eval/message_loss']:.6f} "
+                    f"eval/image_loss={eval_metrics['eval/image_loss']:.6f} "
+                    f"eval/bit_accuracy={eval_metrics['eval/bit_accuracy']:.6f}"
+                )
+
+                if checkpoint_every is not None and finished_epoch % int(checkpoint_every) == 0:
+                    _save_checkpoint(
+                        checkpoint_dir=checkpoint_dir,
+                        encoder=encoder,
+                        decoder=decoder,
+                        optimizer=optimizer,
+                        cfg=cfg,
+                        finished_epoch=finished_epoch,
+                        global_step=global_step,
+                        run_id=run_id,
+                    )
 
                 if max_steps is not None and global_step >= max_steps:
                     break
-
-            if steps == 0:
-                raise RuntimeError("train split is empty")
-
-            finished_epoch = epoch + 1
-            mean_loss = epoch_total_loss / steps
-            mean_message_loss = epoch_message_loss / steps
-            mean_image_loss = epoch_image_loss / steps
-            mean_bit_accuracy = epoch_bit_accuracy / steps
-            eval_metrics = _evaluate_epoch(
+        except KeyboardInterrupt:
+            print("interrupted, saving checkpoint")
+            _save_checkpoint(
+                checkpoint_dir=checkpoint_dir,
                 encoder=encoder,
                 decoder=decoder,
-                loader=eval_loader,
-                device=device,
-                w_msg=float(cfg.loss.w_msg),
-                w_img=float(cfg.loss.w_img),
-                seed=int(cfg.eval.seed),
+                optimizer=optimizer,
+                cfg=cfg,
+                finished_epoch=finished_epoch,
+                global_step=global_step,
+                run_id=run_id,
             )
-            mlflow.log_metrics(
-                {
-                    "train/loss": mean_loss,
-                    "train/message_loss": mean_message_loss,
-                    "train/image_loss": mean_image_loss,
-                    "train/bit_accuracy": mean_bit_accuracy,
-                    **eval_metrics,
-                },
-                step=finished_epoch,
-            )
-            print(
-                f"epoch={finished_epoch} "
-                f"train/loss={mean_loss:.6f} "
-                f"train/message_loss={mean_message_loss:.6f} "
-                f"train/image_loss={mean_image_loss:.6f} "
-                f"train/bit_accuracy={mean_bit_accuracy:.6f} "
-                f"eval/loss={eval_metrics['eval/loss']:.6f} "
-                f"eval/message_loss={eval_metrics['eval/message_loss']:.6f} "
-                f"eval/image_loss={eval_metrics['eval/image_loss']:.6f} "
-                f"eval/bit_accuracy={eval_metrics['eval/bit_accuracy']:.6f}"
-            )
+            return run_id
 
-            if max_steps is not None and global_step >= max_steps:
-                break
-
-        checkpoint_dir = Path(cfg.train.checkpoint_dir) / run_id
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        checkpoint_path = checkpoint_dir / "last.pt"
-        torch.save(
-            {
-                "encoder": encoder.state_dict(),
-                "decoder": decoder.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "config": OmegaConf.to_container(cfg, resolve=True),
-                "epoch": finished_epoch,
-                "global_step": global_step,
-                "run_id": run_id,
-            },
-            checkpoint_path,
+        _save_checkpoint(
+            checkpoint_dir=checkpoint_dir,
+            encoder=encoder,
+            decoder=decoder,
+            optimizer=optimizer,
+            cfg=cfg,
+            finished_epoch=finished_epoch,
+            global_step=global_step,
+            run_id=run_id,
         )
-        mlflow.log_artifact(str(checkpoint_path))
-        print(f"checkpoint={checkpoint_path.resolve()}")
         return run_id
+
+
+def _save_checkpoint(
+    *,
+    checkpoint_dir: Path,
+    encoder: models.Encoder,
+    decoder: models.Decoder,
+    optimizer: torch.optim.Optimizer,
+    cfg: DictConfig,
+    finished_epoch: int,
+    global_step: int,
+    run_id: str,
+) -> None:
+    checkpoint_path = checkpoint_dir / "last.pt"
+    torch.save(
+        {
+            "encoder": encoder.state_dict(),
+            "decoder": decoder.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "config": OmegaConf.to_container(cfg, resolve=True),
+            "epoch": finished_epoch,
+            "global_step": global_step,
+            "run_id": run_id,
+        },
+        checkpoint_path,
+    )
+    mlflow.log_artifact(str(checkpoint_path))
+    print(f"checkpoint={checkpoint_path.resolve()}")
 
 
 def _evaluate_epoch(
