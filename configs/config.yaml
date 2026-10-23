@@ -5,5 +5,6 @@ defaults:
   - train: dev
   - loss: dev
   - eval: dev
+  - demo: dev
   - mlflow: dev
   - _self_
