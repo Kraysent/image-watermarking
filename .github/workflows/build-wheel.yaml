@@ -1,0 +1,48 @@
+name: "[python] Build wheel"
+
+on:
+  - push
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build wheel
+        run: make wheel
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel
+          path: dist/*.whl
+
+  test-wheel:
+    runs-on: ubuntu-latest
+    needs: build-wheel
+    steps:
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: wheel
+          path: dist
+
+      - name: Install wheel as tool
+        run: uv tool install --from dist/*.whl "watermarking"
+
+      - name: Check CLI help
+        run: 'watermarking --help'

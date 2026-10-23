@@ -1,0 +1,123 @@
+[project]
+name = "watermarking"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "click~=8.3.1",
+]
+
+[project.scripts]
+"watermarking" = "watermarking.cli:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    # fixed version so no new linter/formatter errors are introduced over time
+    # probably should not update outside the template
+    "ruff~=0.15.0",
+    "pytest~=9.0.2",
+    "basedpyright~=1.38.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 120
+src = ["."]
+
+[tool.ruff.lint]
+ignore = [
+    "N818", # ignore SomeException -> SomeError rule
+    "B024", # abstract class without abstract methods
+    "B017", # ignore assertRaises(Exception)
+    "B027", # empty method without abstract decorator
+]
+# see https://docs.astral.sh/ruff/rules/ for description of each rule set.
+select = [
+    "E",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "YTT",
+    "B",
+    "A",
+    "C4",
+    "DTZ",
+    "PIE",
+    "RET",
+    "SLF",
+    "PTH",
+    "PLE",
+    "FLY",
+    "NPY201",
+    "PLC0415",
+    "S101",
+]
+
+[tool.basedpyright]
+typeCheckingMode = "off"
+venvPath = "."
+venv = ".venv"
+
+### warns
+reportDeprecated = "warning"
+reportIncompatibleMethodOverride = "warning"
+reportIncompatibleVariableOverride = "warning"
+reportMatchNotExhaustive = "warning"
+
+### pyright issues
+reportGeneralTypeIssues = "error"
+reportFunctionMemberAccess = "error"
+reportMissingImports = "error"
+reportMissingModuleSource = "error"
+reportInvalidTypeForm = "error"
+reportUnusedImport = "error"
+reportUnusedClass = "error"
+reportUnusedFunction = "error"
+reportUnusedVariable = "error"
+reportDuplicateImport = "error"
+reportWildcardImportFromLibrary = "error"
+reportAbstractUsage = "error"
+reportAssertTypeFailure = "error"
+reportCallIssue = "error"
+reportInconsistentOverload = "error"
+reportIndexIssue = "error"
+reportInvalidTypeArguments = "error"
+reportNoOverloadImplementation = "error"
+reportRedeclaration = "error"
+reportConstantRedefinition = "error"
+reportPossiblyUnboundVariable = "error"
+reportInvalidStringEscapeSequence = "error"
+reportUnnecessaryIsInstance = "error"
+reportUnnecessaryCast = "error"
+reportUnnecessaryComparison = "error"
+reportUnnecessaryContains = "error"
+reportAssertAlwaysTrue = "error"
+reportSelfClsParameterName = "error"
+reportUndefinedVariable = "error"
+reportUnhashable = "error"
+reportUnsupportedDunderAll = "error"
+reportUnusedCoroutine = "error"
+reportUnusedExcept = "error"
+reportUnusedExpression = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportUnreachable = "error"
+
+### based pyright issues
+reportIgnoreCommentWithoutRule = "error"
+reportImplicitRelativeImport = "error"
+reportUnsafeMultipleInheritance = "error"
+reportImplicitAbstractClass = "error"
+
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = [
+    "F403", # ignore star imports warning in __init__ files
+]
+"tests/**" = ["S101"]
