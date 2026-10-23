@@ -42,6 +42,15 @@ def test_hydra_overrides_compose() -> None:
     assert cfg.loss.w_img == 2.5
 
 
+def test_hydra_test_config_compose() -> None:
+    with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
+        cfg = hydra.compose(config_name="test")
+    assert cfg.data.image_size == 32
+    assert cfg.data.message_bits == 4
+    assert cfg.train.device == "cpu"
+    assert cfg.mlflow.experiment_name == "watermarking-test"
+
+
 def test_train_runs_one_step(tmp_path: Path) -> None:
     images_dir = tmp_path / "raw"
     images_dir.mkdir(parents=True)

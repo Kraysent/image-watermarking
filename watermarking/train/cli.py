@@ -15,9 +15,10 @@ CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs"
         "allow_extra_args": True,
     }
 )
+@click.option("--config-name", default="config", show_default=True)
 @click.pass_context
-def train(ctx: click.Context) -> None:
+def train(ctx: click.Context, config_name: str) -> None:
     with hydra.initialize_config_dir(config_dir=str(CONFIG_DIR), version_base=None):
-        cfg = hydra.compose(config_name="config", overrides=list(ctx.args))
+        cfg = hydra.compose(config_name=config_name, overrides=list(ctx.args))
     click.echo(OmegaConf.to_yaml(cfg))
     loop_module.train(cfg)

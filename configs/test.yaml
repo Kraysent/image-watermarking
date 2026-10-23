@@ -1,0 +1,10 @@
+defaults:
+  - data: test
+  - encoder: test
+  - decoder: test
+  - train: test
+  - loss: test
+  - eval: test
+  - demo: dev
+  - mlflow: test
+  - _self_
