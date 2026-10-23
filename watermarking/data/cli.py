@@ -2,8 +2,8 @@ from pathlib import Path
 
 import click
 
-import watermarking.ingestion.catalog as catalog_module
-import watermarking.ingestion.download as download_module
+import watermarking.data.catalog as catalog_module
+import watermarking.data.download as download_module
 
 
 @click.group()

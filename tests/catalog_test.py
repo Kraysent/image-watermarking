@@ -3,7 +3,7 @@ from pathlib import Path
 import PIL.Image
 import polars
 
-import watermarking.ingestion.catalog as catalog_module
+import watermarking.data.catalog as catalog_module
 
 
 def test_catalog_writes_image_features(tmp_path: Path) -> None:

@@ -1,6 +1,6 @@
 import click
 
-import watermarking.ingestion.cli as ingestion_cli
+import watermarking.data.cli as data_cli
 
 
 @click.group()
@@ -8,4 +8,4 @@ def cli() -> None:
     pass
 
 
-cli.add_command(ingestion_cli.ingest)
+cli.add_command(data_cli.ingest)

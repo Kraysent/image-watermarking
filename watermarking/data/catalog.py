@@ -3,7 +3,7 @@ from pathlib import Path
 import PIL.Image
 import polars
 
-import watermarking.ingestion.features as features
+import watermarking.data.features as features
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
 DEFAULT_OUTPUT_PATH = Path("data/catalog/popular-street-foods.parquet")
