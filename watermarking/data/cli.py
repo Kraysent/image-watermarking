@@ -4,6 +4,7 @@ import click
 
 import watermarking.data.catalog as catalog_module
 import watermarking.data.download as download_module
+import watermarking.data.validate as validate_module
 
 
 @click.group()
@@ -43,3 +44,16 @@ def download(output_dir: Path, force: bool) -> None:
 def catalog(input_dir: Path, output_path: Path) -> None:
     path = catalog_module.catalog(input_dir=input_dir, output_path=output_path)
     click.echo(path)
+
+
+@ingest.command("validate")
+@click.option(
+    "--input",
+    "input_path",
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    default=validate_module.DEFAULT_INPUT_PATH,
+    show_default=True,
+)
+def validate(input_path: Path) -> None:
+    validate_module.validate(input_path=input_path)
+    click.echo(f"OK: {input_path.resolve()}")
