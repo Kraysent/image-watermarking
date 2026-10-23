@@ -6,7 +6,7 @@ import polars
 import watermarking.data.features as features
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
-DEFAULT_OUTPUT_PATH = Path("data/catalog/popular-street-foods.parquet")
+DEFAULT_OUTPUT_PATH = Path("data/catalog.parquet")
 
 
 def catalog(*, input_dir: Path, output_path: Path) -> Path:

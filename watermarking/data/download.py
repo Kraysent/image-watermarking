@@ -3,7 +3,7 @@ from pathlib import Path
 import kagglehub
 
 DATASET_HANDLE = "nikolasgegenava/popular-street-foods"
-DEFAULT_OUTPUT_DIR = Path("data/raw/popular-street-foods")
+DEFAULT_OUTPUT_DIR = Path("data/raw")
 
 
 def download(*, output_dir: Path, force: bool = False) -> Path:

@@ -5,7 +5,7 @@ import polars
 import watermarking.data.catalog as catalog_module
 
 DEFAULT_INPUT_PATH = catalog_module.DEFAULT_OUTPUT_PATH
-DEFAULT_OUTPUT_PATH = Path("data/splits/popular-street-foods.parquet")
+DEFAULT_OUTPUT_PATH = Path("data/dataset.parquet")
 DEFAULT_SEED = 0
 DEFAULT_TRAIN_RATIO = 0.8
 BUCKETS = 100

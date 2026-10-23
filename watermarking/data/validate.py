@@ -3,7 +3,9 @@ from pathlib import Path
 import pandera.polars as pa
 import polars
 
-DEFAULT_INPUT_PATH = Path("data/catalog/popular-street-foods.parquet")
+import watermarking.data.catalog as catalog_module
+
+DEFAULT_INPUT_PATH = catalog_module.DEFAULT_OUTPUT_PATH
 MIN_SIZE = 20
 MAX_ASPECT_RATIO = 8.0
 MIN_STD = 1.0
