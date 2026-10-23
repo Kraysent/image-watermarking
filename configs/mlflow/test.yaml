@@ -1,0 +1,3 @@
+tracking_uri: sqlite:///outputs/mlflow.db
+artifact_root: outputs/mlartifacts
+experiment_name: watermarking-test

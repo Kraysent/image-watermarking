@@ -42,6 +42,13 @@ check:
 		--config-file=pyproject.toml
 	@echo "Testing ok."
 
+check-integration:
+	@uv run pytest \
+		--quiet \
+		--config-file=pyproject.toml \
+		-m integration
+	@echo "Integration testing ok."
+
 fix:
 	@uv run ruff format \
 		--quiet \

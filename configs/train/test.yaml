@@ -1,0 +1,6 @@
+epochs: 800
+lr: 0.01
+seed: 0
+device: cpu
+max_steps: null
+checkpoint_dir: outputs/checkpoints

@@ -5,6 +5,7 @@ import click
 import watermarking.data.catalog as catalog_module
 import watermarking.data.download as download_module
 import watermarking.data.split as split_module
+import watermarking.data.synthetic as synthetic_module
 import watermarking.data.validate as validate_module
 
 
@@ -24,6 +25,22 @@ def ingest() -> None:
 @click.option("--force", is_flag=True)
 def download(output_dir: Path, force: bool) -> None:
     path = download_module.download(output_dir=output_dir, force=force)
+    click.echo(path)
+
+
+@ingest.command("synthetic")
+@click.option(
+    "--output",
+    "output_dir",
+    type=click.Path(path_type=Path),
+    default=synthetic_module.DEFAULT_OUTPUT_DIR,
+    show_default=True,
+)
+@click.option("--count", type=int, default=synthetic_module.DEFAULT_COUNT, show_default=True)
+@click.option("--size", type=int, default=synthetic_module.DEFAULT_SIZE, show_default=True)
+@click.option("--seed", type=int, default=synthetic_module.DEFAULT_SEED, show_default=True)
+def synthetic(output_dir: Path, count: int, size: int, seed: int) -> None:
+    path = synthetic_module.generate(output_dir=output_dir, count=count, size=size, seed=seed)
     click.echo(path)
 
 
