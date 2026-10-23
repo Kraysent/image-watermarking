@@ -16,6 +16,13 @@ def test_cli_help_lists_train() -> None:
     result = runner.invoke(cli_module.cli, ["--help"])
     assert result.exit_code == 0
     assert "train" in result.output
+    assert "demo" in result.output
+
+
+def test_cli_has_no_eval_command() -> None:
+    runner = click.testing.CliRunner()
+    result = runner.invoke(cli_module.cli, ["eval", "--help"])
+    assert result.exit_code != 0
 
 
 def test_hydra_overrides_compose() -> None:
@@ -37,12 +44,17 @@ def test_hydra_overrides_compose() -> None:
 
 def test_train_runs_one_step(tmp_path: Path) -> None:
     images_dir = tmp_path / "raw"
-    image_path = images_dir / "sample.png"
-    image_path.parent.mkdir(parents=True)
-    PIL.Image.new("RGB", (40, 40), color=(12, 34, 56)).save(image_path)
+    images_dir.mkdir(parents=True)
+    for name in ("train.png", "test.png"):
+        PIL.Image.new("RGB", (40, 40), color=(12, 34, 56)).save(images_dir / name)
 
     dataset_path = tmp_path / "dataset.parquet"
-    polars.DataFrame({"relative_path": ["sample.png"], "split": ["train"]}).write_parquet(dataset_path)
+    polars.DataFrame(
+        {
+            "relative_path": ["train.png", "test.png"],
+            "split": ["train", "test"],
+        }
+    ).write_parquet(dataset_path)
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
     tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
     artifact_root = tmp_path / "outputs" / "mlartifacts"
@@ -61,6 +73,7 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
             "decoder.channels=[4]",
             "train.max_steps=1",
             "train.device=cpu",
+            "eval.n_images=1",
             f"train.checkpoint_dir={checkpoint_dir}",
             f"mlflow.tracking_uri={tracking_uri}",
             f"mlflow.artifact_root={artifact_root}",
@@ -69,6 +82,7 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "epoch=1" in result.output
+    assert "eval_loss=" in result.output
     assert "run_id=" in result.output
 
     run_id = next(line.removeprefix("run_id=") for line in result.output.splitlines() if line.startswith("run_id="))
@@ -80,5 +94,9 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert checkpoint["run_id"] == run_id
 
     mlflow.set_tracking_uri(tracking_uri)
+    run = mlflow.get_run(run_id)
+    assert "eval_loss" in run.data.metrics
+    assert "eval_message_loss" in run.data.metrics
+    assert "eval_image_loss" in run.data.metrics
     artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="last.pt"))
     assert artifact_path.is_file()

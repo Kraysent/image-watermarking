@@ -19,10 +19,16 @@ def test_cli_help_lists_demo() -> None:
 def test_embed_and_extract_roundtrip(tmp_path: Path) -> None:
     images_dir = tmp_path / "raw"
     images_dir.mkdir(parents=True)
-    PIL.Image.new("RGB", (40, 40), color=(12, 34, 56)).save(images_dir / "train.png")
+    for name in ("train.png", "test.png"):
+        PIL.Image.new("RGB", (40, 40), color=(12, 34, 56)).save(images_dir / name)
 
     dataset_path = tmp_path / "dataset.parquet"
-    polars.DataFrame({"relative_path": ["train.png"], "split": ["train"]}).write_parquet(dataset_path)
+    polars.DataFrame(
+        {
+            "relative_path": ["train.png", "test.png"],
+            "split": ["train", "test"],
+        }
+    ).write_parquet(dataset_path)
 
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
     tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
