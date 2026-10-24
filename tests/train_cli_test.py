@@ -125,3 +125,10 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert "eval/ssim" in run.data.metrics
     artifact_path = Path(mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path="epoch_1.pt"))
     assert artifact_path.is_file()
+
+    client = mlflow.tracking.MlflowClient(tracking_uri)
+    registered = client.get_registered_model(run.info.run_name)
+    assert registered.name == run.info.run_name
+    versions = client.search_model_versions(f"name='{run.info.run_name}'")
+    assert len(versions) == 1
+    assert versions[0].run_id == run_id

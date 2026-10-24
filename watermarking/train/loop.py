@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import mlflow
+import mlflow.pyfunc
 import structlog
 import torch
 import torch.nn.functional as functional
@@ -17,6 +18,11 @@ import watermarking.train.metrics as metrics
 import watermarking.train.models as models
 
 log = structlog.get_logger()
+
+
+class WatermarkCheckpointModel(mlflow.pyfunc.PythonModel):
+    def predict(self, context, model_input, params=None):
+        raise NotImplementedError("load artifacts['checkpoint'] with torch.load")
 
 
 def train(cfg: DictConfig) -> str:
@@ -201,7 +207,7 @@ def train(cfg: DictConfig) -> str:
             mlflow.end_run(status="KILLED")
             return run_id
 
-        _save_checkpoint(
+        checkpoint_path = _save_checkpoint(
             checkpoint_dir=checkpoint_dir,
             encoder=encoder,
             decoder=decoder,
@@ -211,6 +217,7 @@ def train(cfg: DictConfig) -> str:
             global_step=global_step,
             run_id=run_id,
         )
+        _register_model(checkpoint_path=checkpoint_path, model_name=run.info.run_name)
         return run_id
 
 
@@ -224,7 +231,7 @@ def _save_checkpoint(
     finished_epoch: int,
     global_step: int,
     run_id: str,
-) -> None:
+) -> Path:
     checkpoint_path = checkpoint_dir / f"epoch_{finished_epoch}.pt"
     torch.save(
         {
@@ -240,6 +247,16 @@ def _save_checkpoint(
     )
     mlflow.log_artifact(str(checkpoint_path))
     log.info("checkpoint saved", checkpoint=str(checkpoint_path.resolve()))
+    return checkpoint_path
+
+
+def _register_model(*, checkpoint_path: Path, model_name: str) -> None:
+    mlflow.pyfunc.log_model(
+        name=model_name,
+        python_model=WatermarkCheckpointModel(),
+        artifacts={"checkpoint": str(checkpoint_path)},
+        registered_model_name=model_name,
+    )
 
 
 def _evaluate_epoch(
