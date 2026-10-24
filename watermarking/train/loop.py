@@ -96,6 +96,7 @@ def train(cfg: DictConfig) -> str:
 
         max_steps = cfg.train.max_steps
         checkpoint_every = cfg.train.checkpoint_every
+        trace_sample_pct = float(cfg.train.get("trace_sample_pct", 0.0))
         global_step = 0
         finished_epoch = 0
         total_epochs = int(cfg.train.epochs)
@@ -116,34 +117,28 @@ def train(cfg: DictConfig) -> str:
                 for image, message in train_loader:
                     image = image.to(device)
                     message = message.to(device)
-
-                    diff = encoder(image, message)
-                    watermarked = (image + diff).clamp(0.0, 1.0)
-                    attacked = train_attacks.apply(watermarked)
-                    prediction = decoder(attacked)
-
-                    message_loss = metrics.message_loss(
-                        prediction,
-                        message,
-                        cfg.loss.message_loss_type,
+                    should_trace = trace_sample_pct > 0.0 and torch.rand(()).item() < trace_sample_pct
+                    message_loss_value, image_loss_value, total_loss_value, bit_accuracy_value = _train_step(
+                        encoder=encoder,
+                        decoder=decoder,
+                        optimizer=optimizer,
+                        image=image,
+                        message=message,
+                        attacks=train_attacks,
+                        w_msg=float(cfg.loss.w_msg),
+                        w_img=float(cfg.loss.w_img),
+                        message_loss_type=cfg.loss.message_loss_type,
+                        image_loss_type=cfg.loss.image_loss_type,
+                        trace=should_trace,
+                        epoch=epoch + 1,
+                        global_step=global_step + 1,
+                        run_id=run_id,
                     )
-                    image_loss = metrics.image_loss(
-                        image,
-                        watermarked,
-                        diff,
-                        cfg.loss.image_loss_type,
-                    )
-                    loss = cfg.loss.w_msg * message_loss + cfg.loss.w_img * image_loss
-                    bit_accuracy = metrics.bit_accuracy(prediction, message)
 
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
-
-                    epoch_message_loss += message_loss.item()
-                    epoch_image_loss += image_loss.item()
-                    epoch_total_loss += loss.item()
-                    epoch_bit_accuracy += bit_accuracy.item()
+                    epoch_message_loss += message_loss_value
+                    epoch_image_loss += image_loss_value
+                    epoch_total_loss += total_loss_value
+                    epoch_bit_accuracy += bit_accuracy_value
                     steps += 1
                     global_step += 1
 
@@ -232,6 +227,130 @@ def train(cfg: DictConfig) -> str:
         )
         _register_model(checkpoint_path=checkpoint_path, model_name=run.info.run_name)
         return run_id
+
+
+def _train_step(
+    *,
+    encoder: models.Encoder,
+    decoder: models.Decoder,
+    optimizer: torch.optim.Optimizer,
+    image: torch.Tensor,
+    message: torch.Tensor,
+    attacks: attacks_module.AttackPipeline,
+    w_msg: float,
+    w_img: float,
+    message_loss_type: str,
+    image_loss_type: str,
+    trace: bool,
+    epoch: int,
+    global_step: int,
+    run_id: str,
+) -> tuple[float, float, float, float]:
+    if not trace:
+        return _run_train_step(
+            encoder=encoder,
+            decoder=decoder,
+            optimizer=optimizer,
+            image=image,
+            message=message,
+            attacks=attacks,
+            w_msg=w_msg,
+            w_img=w_img,
+            message_loss_type=message_loss_type,
+            image_loss_type=image_loss_type,
+        )
+
+    with mlflow.start_span(name="train_step", run_id=run_id) as span:
+        span.set_inputs(
+            {
+                "epoch": epoch,
+                "global_step": global_step,
+                "batch_size": int(image.shape[0]),
+            }
+        )
+        with mlflow.start_span(name="encoder") as encoder_span:
+            diff = encoder(image, message)
+            watermarked = (image + diff).clamp(0.0, 1.0)
+            encoder_span.set_inputs({"batch_size": int(image.shape[0])})
+            encoder_span.set_outputs({"diff_abs_mean": float(diff.detach().abs().mean())})
+        with mlflow.start_span(name="attack") as attack_span:
+            attacked = attacks.apply(watermarked)
+            attack_span.set_inputs({"batch_size": int(watermarked.shape[0])})
+            attack_span.set_outputs({"batch_size": int(attacked.shape[0])})
+        with mlflow.start_span(name="decoder") as decoder_span:
+            prediction = decoder(attacked)
+            decoder_span.set_inputs({"batch_size": int(attacked.shape[0])})
+            decoder_span.set_outputs({"batch_size": int(prediction.shape[0])})
+        with mlflow.start_span(name="loss") as loss_span:
+            message_loss = metrics.message_loss(prediction, message, message_loss_type)
+            image_loss = metrics.image_loss(image, watermarked, diff, image_loss_type)
+            loss = w_msg * message_loss + w_img * image_loss
+            bit_accuracy = metrics.bit_accuracy(prediction, message)
+            loss_span.set_inputs({"w_msg": w_msg, "w_img": w_img})
+            loss_span.set_outputs(
+                {
+                    "message_loss": float(message_loss.detach()),
+                    "image_loss": float(image_loss.detach()),
+                    "loss": float(loss.detach()),
+                    "bit_accuracy": float(bit_accuracy.detach()),
+                }
+            )
+        optimizer.zero_grad()
+        with mlflow.start_span(name="backward") as backward_span:
+            loss.backward()
+            backward_span.set_inputs({"loss": float(loss.detach())})
+            backward_span.set_outputs({"status": "ok"})
+        with mlflow.start_span(name="optimizer") as optimizer_span:
+            optimizer.step()
+            optimizer_span.set_inputs({"global_step": global_step})
+            optimizer_span.set_outputs({"status": "ok"})
+        outputs = (
+            float(message_loss.detach()),
+            float(image_loss.detach()),
+            float(loss.detach()),
+            float(bit_accuracy.detach()),
+        )
+        span.set_outputs(
+            {
+                "message_loss": outputs[0],
+                "image_loss": outputs[1],
+                "loss": outputs[2],
+                "bit_accuracy": outputs[3],
+            }
+        )
+        return outputs
+
+
+def _run_train_step(
+    *,
+    encoder: models.Encoder,
+    decoder: models.Decoder,
+    optimizer: torch.optim.Optimizer,
+    image: torch.Tensor,
+    message: torch.Tensor,
+    attacks: attacks_module.AttackPipeline,
+    w_msg: float,
+    w_img: float,
+    message_loss_type: str,
+    image_loss_type: str,
+) -> tuple[float, float, float, float]:
+    diff = encoder(image, message)
+    watermarked = (image + diff).clamp(0.0, 1.0)
+    attacked = attacks.apply(watermarked)
+    prediction = decoder(attacked)
+    message_loss = metrics.message_loss(prediction, message, message_loss_type)
+    image_loss = metrics.image_loss(image, watermarked, diff, image_loss_type)
+    loss = w_msg * message_loss + w_img * image_loss
+    bit_accuracy = metrics.bit_accuracy(prediction, message)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    return (
+        float(message_loss.detach()),
+        float(image_loss.detach()),
+        float(loss.detach()),
+        float(bit_accuracy.detach()),
+    )
 
 
 def _save_checkpoint(

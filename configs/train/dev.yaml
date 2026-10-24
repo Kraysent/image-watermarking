@@ -5,6 +5,7 @@ device: cpu
 max_steps: null
 checkpoint_dir: outputs/checkpoints
 checkpoint_every: 10
+trace_sample_pct: 0.01
 attacks:
   - type: jpeg
     probability: 0.15

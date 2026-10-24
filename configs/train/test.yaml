@@ -5,4 +5,5 @@ device: cpu
 max_steps: null
 checkpoint_dir: outputs/checkpoints
 checkpoint_every: null
+trace_sample_pct: 0.0
 attacks: []
