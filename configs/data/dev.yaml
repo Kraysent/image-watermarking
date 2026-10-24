@@ -4,3 +4,4 @@ image_size: 64
 message_bits: 32
 batch_size: 32
 num_workers: 0
+message_seed: null

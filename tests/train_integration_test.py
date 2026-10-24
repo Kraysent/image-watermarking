@@ -91,5 +91,5 @@ def test_ingest_and_train_overfits_to_near_zero_loss(tmp_path: Path) -> None:
     bit_accuracies = client.get_metric_history(run_id, "train/bit_accuracy")
     assert len(message_losses) >= 2
     assert message_losses[0].value > 0.5
-    assert message_losses[-1].value < message_losses[0].value / 2
+    assert message_losses[-1].value < 1e-2
     assert bit_accuracies[-1].value == 1.0

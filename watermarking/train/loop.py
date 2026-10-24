@@ -44,12 +44,16 @@ def train(cfg: DictConfig) -> str:
         torch.manual_seed(cfg.train.seed)
         device = torch.device(cfg.train.device)
 
+        message_seed = cfg.data.get("message_seed")
+        if message_seed is not None:
+            message_seed = int(message_seed)
         train_dataset = dataset_module.WatermarkDataset(
             dataset_path=Path(cfg.data.dataset_path),
             images_dir=Path(cfg.data.images_dir),
             split="train",
             image_size=cfg.data.image_size,
             message_bits=cfg.data.message_bits,
+            message_seed=message_seed,
         )
         train_loader = torch.utils.data.DataLoader(
             train_dataset,
@@ -63,6 +67,7 @@ def train(cfg: DictConfig) -> str:
             split="test",
             image_size=cfg.data.image_size,
             message_bits=cfg.data.message_bits,
+            message_seed=message_seed,
         )
         if len(eval_dataset) == 0:
             raise RuntimeError("test split is empty")
@@ -162,7 +167,6 @@ def train(cfg: DictConfig) -> str:
                     w_img=float(cfg.loss.w_img),
                     message_loss_type=cfg.loss.message_loss_type,
                     image_loss_type=cfg.loss.image_loss_type,
-                    seed=int(cfg.eval.seed),
                     attacks=eval_attacks,
                 )
                 mlflow.log_metrics(
@@ -278,12 +282,10 @@ def _evaluate_epoch(
     w_img: float,
     message_loss_type: str,
     image_loss_type: str,
-    seed: int,
     attacks: attacks_module.AttackPipeline,
 ) -> dict[str, float]:
     encoder.eval()
     decoder.eval()
-    torch.manual_seed(seed)
     total_message_loss = 0.0
     total_image_loss = 0.0
     total_loss = 0.0

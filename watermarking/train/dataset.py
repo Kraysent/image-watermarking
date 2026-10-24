@@ -16,11 +16,13 @@ class WatermarkDataset(torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor
         split: str,
         image_size: int,
         message_bits: int,
+        message_seed: int | None = None,
     ) -> None:
         frame = polars.read_parquet(dataset_path).filter(polars.col("split") == split)
         self.paths = [images_dir / relative_path for relative_path in frame["relative_path"].to_list()]
         self.image_size = image_size
         self.message_bits = message_bits
+        self.message_seed = message_seed
 
     def __len__(self) -> int:
         return len(self.paths)
@@ -29,5 +31,15 @@ class WatermarkDataset(torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor
         with PIL.Image.open(self.paths[index]) as image:
             rgb = image.convert("RGB").resize((self.image_size, self.image_size), PIL.Image.Resampling.BILINEAR)
         image_tensor = torch.from_numpy(np.asarray(rgb, dtype=np.float32).copy()).permute(2, 0, 1) / 255.0
-        message = torch.randint(0, 2, (self.message_bits,), dtype=torch.float32)
+        if self.message_seed is None:
+            message = torch.randint(0, 2, (self.message_bits,), dtype=torch.float32)
+        else:
+            generator = torch.Generator().manual_seed(self.message_seed + index)
+            message = torch.randint(
+                0,
+                2,
+                (self.message_bits,),
+                dtype=torch.float32,
+                generator=generator,
+            )
         return image_tensor, message
