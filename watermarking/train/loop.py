@@ -100,12 +100,18 @@ def train(cfg: DictConfig) -> str:
         max_steps = cfg.train.max_steps
         checkpoint_every = cfg.train.checkpoint_every
         trace_sample_pct = float(cfg.train.get("trace_sample_pct", 0.0))
+        early_stop_cfg = cfg.train.get("early_stop")
+        early_stop_patience = None if early_stop_cfg is None else early_stop_cfg.get("patience")
+        early_stop_min_delta_pct = 0.0 if early_stop_cfg is None else float(early_stop_cfg.get("min_delta_pct", 0.0))
+        if early_stop_patience is not None:
+            early_stop_patience = int(early_stop_patience)
         global_step = 0
         finished_epoch = 0
-        total_epochs = int(cfg.train.epochs)
+        total_epochs = int(cfg.train.max_epochs)
         checkpoint_dir = Path(cfg.train.checkpoint_dir) / run_id
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         train_start = time.perf_counter()
+        eval_loss_history: list[float] = []
 
         try:
             for epoch in range(total_epochs):
@@ -167,6 +173,8 @@ def train(cfg: DictConfig) -> str:
                     image_loss_type=cfg.train.loss.image_loss_type,
                     attacks=attacks,
                 )
+                eval_loss = eval_metrics["eval/loss"]
+                eval_loss_history.append(eval_loss)
                 mlflow.log_metrics(
                     {
                         "train/loss": mean_loss,
@@ -184,7 +192,7 @@ def train(cfg: DictConfig) -> str:
                     "epoch finished",
                     epoch=finished_epoch,
                     train_loss=round(mean_loss, 6),
-                    eval_loss=round(eval_metrics["eval/loss"], 6),
+                    eval_loss=round(eval_loss, 6),
                     elapsed=_format_duration(elapsed),
                     eta=_format_duration(eta),
                 )
@@ -202,6 +210,20 @@ def train(cfg: DictConfig) -> str:
                     )
 
                 if max_steps is not None and global_step >= max_steps:
+                    break
+
+                if _loss_plateaued(
+                    eval_loss_history,
+                    patience=early_stop_patience,
+                    min_delta_pct=early_stop_min_delta_pct,
+                ):
+                    log.info(
+                        "early stop",
+                        epoch=finished_epoch,
+                        patience=early_stop_patience,
+                        min_delta_pct=early_stop_min_delta_pct,
+                        eval_loss=round(eval_loss, 6),
+                    )
                     break
         except KeyboardInterrupt:
             log.info("interrupted, saving checkpoint")
@@ -514,6 +536,19 @@ def _flatten_params(value: object, prefix: str = "") -> dict[str, str | int | fl
     if isinstance(value, (str, int, float, bool)):
         return {prefix: value}
     return {prefix: str(value)}
+
+
+def _loss_plateaued(
+    losses: list[float],
+    *,
+    patience: int | None,
+    min_delta_pct: float,
+) -> bool:
+    if patience is None or patience <= 0 or len(losses) < patience:
+        return False
+    window = losses[-patience:]
+    mean_loss = sum(window) / len(window)
+    return max(window) - min(window) <= min_delta_pct * abs(mean_loss)
 
 
 def _format_duration(seconds: float) -> str:

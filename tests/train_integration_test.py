@@ -151,7 +151,7 @@ def test_zero_message_loss_weight_collapses_to_null_diff(tmp_path: Path) -> None
             f"data.images_dir={images_dir}",
             f"data.batch_size={train_count}",
             "train.loss.w_msg=0",
-            "train.epochs=50",
+            "train.max_epochs=50",
             f"train.checkpoint_dir={checkpoint_dir}",
             f"mlflow.tracking_uri={tracking_uri}",
             f"mlflow.artifact_root={artifact_root}",

@@ -39,12 +39,12 @@ def test_hydra_overrides_compose() -> None:
             overrides=[
                 "model.encoder.channels=[32,64]",
                 "model.decoder.channels=[8]",
-                "train.epochs=3",
+                "train.max_epochs=3",
                 "train.loss.w_img=2.5",
                 "train.loss.image_loss_type=ssim",
             ],
         )
-    assert cfg.train.epochs == 3
+    assert cfg.train.max_epochs == 3
     assert list(cfg.model.encoder.channels) == [32, 64]
     assert list(cfg.model.decoder.channels) == [8]
     assert cfg.train.loss.w_img == 2.5
