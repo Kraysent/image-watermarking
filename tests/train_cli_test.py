@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import click.testing
@@ -9,6 +10,12 @@ import torch
 
 import watermarking.cli as cli_module
 import watermarking.train.cli as train_cli
+
+
+def _run_id_from_output(output: str) -> str:
+    match = re.search(r"\brun_id=([a-f0-9]+)\b", output)
+    assert match is not None, output
+    return match.group(1)
 
 
 def test_cli_help_lists_train() -> None:
@@ -92,10 +99,12 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
 
-    run_id = next(line.removeprefix("run_id=") for line in result.output.splitlines() if line.startswith("run_id="))
+    run_id = _run_id_from_output(result.output)
     checkpoint_path = checkpoint_dir / run_id / "epoch_1.pt"
     assert checkpoint_path.is_file()
     assert "checkpoint=" in result.output
+    assert "elapsed=" in result.output
+    assert "eta=" in result.output
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     assert set(checkpoint) >= {"encoder", "decoder", "optimizer", "config", "epoch", "global_step", "run_id"}
     assert checkpoint["run_id"] == run_id
@@ -103,6 +112,7 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
 
     mlflow.set_tracking_uri(tracking_uri)
     run = mlflow.get_run(run_id)
+    assert run.info.status == "FINISHED"
     assert "command" in run.data.params
     assert run.data.params["command"]
     assert "eval/loss" in run.data.metrics

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import click.testing
@@ -6,6 +7,12 @@ import polars
 import pytest
 
 import watermarking.cli as cli_module
+
+
+def _run_id_from_output(output: str) -> str:
+    match = re.search(r"\brun_id=([a-f0-9]+)\b", output)
+    assert match is not None, output
+    return match.group(1)
 
 
 @pytest.mark.integration
@@ -72,9 +79,7 @@ def test_ingest_and_train_overfits_to_near_zero_loss(tmp_path: Path) -> None:
     )
     assert train_result.exit_code == 0, train_result.output
 
-    run_id = next(
-        line.removeprefix("run_id=") for line in train_result.output.splitlines() if line.startswith("run_id=")
-    )
+    run_id = _run_id_from_output(train_result.output)
     mlflow.set_tracking_uri(tracking_uri)
     client = mlflow.tracking.MlflowClient(tracking_uri)
     message_losses = client.get_metric_history(run_id, "train/message_loss")

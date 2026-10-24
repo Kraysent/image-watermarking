@@ -1,9 +1,12 @@
+import logging
 import shlex
 import sys
+import time
 from collections.abc import Mapping
 from pathlib import Path
 
 import mlflow
+import structlog
 import torch
 import torch.nn.functional as functional
 import torch.utils.data
@@ -13,15 +16,18 @@ import watermarking.train.dataset as dataset_module
 import watermarking.train.metrics as metrics
 import watermarking.train.models as models
 
+log = structlog.get_logger()
+
 
 def train(cfg: DictConfig) -> str:
+    _configure_logging()
     _prepare_output_dirs(cfg)
     mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
     _ensure_experiment(cfg.mlflow.experiment_name, Path(cfg.mlflow.artifact_root))
 
     with mlflow.start_run(log_system_metrics=True) as run:
         run_id = run.info.run_id
-        print(f"run_id={run_id}")
+        log.info("run started", run_id=run_id)
         mlflow.log_params(
             {
                 **_flatten_params(OmegaConf.to_container(cfg, resolve=True)),
@@ -79,11 +85,13 @@ def train(cfg: DictConfig) -> str:
         checkpoint_every = cfg.train.checkpoint_every
         global_step = 0
         finished_epoch = 0
+        total_epochs = int(cfg.train.epochs)
         checkpoint_dir = Path(cfg.train.checkpoint_dir) / run_id
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        train_start = time.perf_counter()
 
         try:
-            for epoch in range(cfg.train.epochs):
+            for epoch in range(total_epochs):
                 encoder.train()
                 decoder.train()
                 epoch_message_loss = 0.0
@@ -152,7 +160,17 @@ def train(cfg: DictConfig) -> str:
                     },
                     step=finished_epoch,
                 )
-                print(f"epoch={finished_epoch} train/loss={mean_loss:.6f} eval/loss={eval_metrics['eval/loss']:.6f}")
+                elapsed = time.perf_counter() - train_start
+                remaining_epochs = total_epochs - finished_epoch
+                eta = (elapsed / finished_epoch) * remaining_epochs
+                log.info(
+                    "epoch finished",
+                    epoch=finished_epoch,
+                    train_loss=round(mean_loss, 6),
+                    eval_loss=round(eval_metrics["eval/loss"], 6),
+                    elapsed=_format_duration(elapsed),
+                    eta=_format_duration(eta),
+                )
 
                 if checkpoint_every is not None and finished_epoch % int(checkpoint_every) == 0:
                     _save_checkpoint(
@@ -169,7 +187,7 @@ def train(cfg: DictConfig) -> str:
                 if max_steps is not None and global_step >= max_steps:
                     break
         except KeyboardInterrupt:
-            print("interrupted, saving checkpoint")
+            log.info("interrupted, saving checkpoint")
             _save_checkpoint(
                 checkpoint_dir=checkpoint_dir,
                 encoder=encoder,
@@ -180,6 +198,7 @@ def train(cfg: DictConfig) -> str:
                 global_step=global_step,
                 run_id=run_id,
             )
+            mlflow.end_run(status="KILLED")
             return run_id
 
         _save_checkpoint(
@@ -220,7 +239,7 @@ def _save_checkpoint(
         checkpoint_path,
     )
     mlflow.log_artifact(str(checkpoint_path))
-    print(f"checkpoint={checkpoint_path.resolve()}")
+    log.info("checkpoint saved", checkpoint=str(checkpoint_path.resolve()))
 
 
 def _evaluate_epoch(
@@ -311,3 +330,24 @@ def _flatten_params(value: object, prefix: str = "") -> dict[str, str | int | fl
     if isinstance(value, (str, int, float, bool)):
         return {prefix: value}
     return {prefix: str(value)}
+
+
+def _format_duration(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _configure_logging() -> None:
+    structlog.configure(
+        processors=[
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            structlog.dev.ConsoleRenderer(colors=False),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(),
+        cache_logger_on_first_use=True,
+    )

@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import click.testing
@@ -7,6 +8,12 @@ import polars
 import watermarking.cli as cli_module
 import watermarking.demo.app as app_module
 import watermarking.demo.model as model_module
+
+
+def _run_id_from_output(output: str) -> str:
+    match = re.search(r"\brun_id=([a-f0-9]+)\b", output)
+    assert match is not None, output
+    return match.group(1)
 
 
 def test_cli_help_lists_demo() -> None:
@@ -55,9 +62,7 @@ def test_embed_and_extract_roundtrip(tmp_path: Path) -> None:
         ],
     )
     assert train_result.exit_code == 0, train_result.output
-    run_id = next(
-        line.removeprefix("run_id=") for line in train_result.output.splitlines() if line.startswith("run_id=")
-    )
+    run_id = _run_id_from_output(train_result.output)
 
     session = model_module.load_session(run_id=run_id, checkpoint_dir=checkpoint_dir, device="cpu")
     image = PIL.Image.new("RGB", (40, 40), color=(200, 100, 50))

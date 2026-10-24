@@ -2,3 +2,5 @@
 - arbitrary image sizes
 - release Gradio UI to Hugging Face
 - add pics to README
+- train from a given checkpoint instead of random weights
+- larger bytes num
