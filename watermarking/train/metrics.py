@@ -7,6 +7,22 @@ def message_accuracy(prediction: torch.Tensor, message: torch.Tensor) -> torch.T
     return (predicted == message).all(dim=-1).float()
 
 
+def bit_accuracy(prediction: torch.Tensor, message: torch.Tensor) -> torch.Tensor:
+    return ((prediction > 0.5) == message).float().mean()
+
+
+def message_loss(
+    prediction: torch.Tensor,
+    message: torch.Tensor,
+    loss_type: str,
+) -> torch.Tensor:
+    if loss_type == "mse":
+        return functional.mse_loss(prediction, message)
+    if loss_type == "bce":
+        return functional.binary_cross_entropy_with_logits(prediction, message)
+    raise ValueError(f"unknown message_loss_type: {loss_type}")
+
+
 def image_loss(
     cover: torch.Tensor,
     watermarked: torch.Tensor,

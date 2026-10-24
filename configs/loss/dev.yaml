@@ -1,3 +1,4 @@
 w_msg: 2.0
 w_img: 1.0
+message_loss_type: mse
 image_loss_type: mse

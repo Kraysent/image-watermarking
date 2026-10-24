@@ -1,1 +1,29 @@
 seed: 0
+attacks:
+  - type: jpeg
+    probability: 0.15
+    args:
+      quality: [40, 80]
+  - type: crop
+    probability: 0.1
+    args:
+      scale: [0.7, 0.95]
+  - type: rotate
+    probability: 0.1
+    args:
+      degrees: [-15, 15]
+  - type: blur
+    probability: 0.1
+    args:
+      radius: [0.5, 2.0]
+  - type: resize
+    probability: 0.1
+    args:
+      scale: [0.5, 0.9]
+  - type: brightness
+    probability: 0.1
+    args:
+      factor: [0.6, 1.4]
+  - type: hflip
+    probability: 0.1
+    args: {}

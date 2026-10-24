@@ -9,10 +9,10 @@ import mlflow
 import mlflow.pyfunc
 import structlog
 import torch
-import torch.nn.functional as functional
 import torch.utils.data
 from omegaconf import DictConfig, OmegaConf
 
+import watermarking.train.attacks as attacks_module
 import watermarking.train.dataset as dataset_module
 import watermarking.train.metrics as metrics
 import watermarking.train.models as models
@@ -86,6 +86,8 @@ def train(cfg: DictConfig) -> str:
             list(encoder.parameters()) + list(decoder.parameters()),
             lr=cfg.train.lr,
         )
+        train_attacks = attacks_module.build_attack_pipeline(cfg.train.get("attacks"))
+        eval_attacks = attacks_module.build_attack_pipeline(cfg.eval.get("attacks"))
 
         max_steps = cfg.train.max_steps
         checkpoint_every = cfg.train.checkpoint_every
@@ -112,9 +114,14 @@ def train(cfg: DictConfig) -> str:
 
                     diff = encoder(image, message)
                     watermarked = (image + diff).clamp(0.0, 1.0)
-                    prediction = decoder(watermarked)
+                    attacked = train_attacks.apply(watermarked)
+                    prediction = decoder(attacked)
 
-                    message_loss = functional.mse_loss(prediction, message)
+                    message_loss = metrics.message_loss(
+                        prediction,
+                        message,
+                        cfg.loss.message_loss_type,
+                    )
                     image_loss = metrics.image_loss(
                         image,
                         watermarked,
@@ -122,7 +129,7 @@ def train(cfg: DictConfig) -> str:
                         cfg.loss.image_loss_type,
                     )
                     loss = cfg.loss.w_msg * message_loss + cfg.loss.w_img * image_loss
-                    bit_accuracy = ((prediction > 0.5) == message).float().mean()
+                    bit_accuracy = metrics.bit_accuracy(prediction, message)
 
                     optimizer.zero_grad()
                     loss.backward()
@@ -153,8 +160,10 @@ def train(cfg: DictConfig) -> str:
                     device=device,
                     w_msg=float(cfg.loss.w_msg),
                     w_img=float(cfg.loss.w_img),
+                    message_loss_type=cfg.loss.message_loss_type,
                     image_loss_type=cfg.loss.image_loss_type,
                     seed=int(cfg.eval.seed),
+                    attacks=eval_attacks,
                 )
                 mlflow.log_metrics(
                     {
@@ -267,8 +276,10 @@ def _evaluate_epoch(
     device: torch.device,
     w_msg: float,
     w_img: float,
+    message_loss_type: str,
     image_loss_type: str,
     seed: int,
+    attacks: attacks_module.AttackPipeline,
 ) -> dict[str, float]:
     encoder.eval()
     decoder.eval()
@@ -289,11 +300,12 @@ def _evaluate_epoch(
             message = message.to(device)
             diff = encoder(image, message)
             watermarked = (image + diff).clamp(0.0, 1.0)
-            prediction = decoder(watermarked)
-            message_loss = functional.mse_loss(prediction, message)
+            attacked = attacks.apply(watermarked)
+            prediction = decoder(attacked)
+            message_loss = metrics.message_loss(prediction, message, message_loss_type)
             image_loss = metrics.image_loss(image, watermarked, diff, image_loss_type)
             loss = w_msg * message_loss + w_img * image_loss
-            bit_accuracy = ((prediction > 0.5) == message).float().mean()
+            bit_accuracy = metrics.bit_accuracy(prediction, message)
             batch_size = image.shape[0]
             total_message_loss += message_loss.item()
             total_image_loss += image_loss.item()

@@ -10,6 +10,22 @@ def test_message_accuracy_requires_all_bits() -> None:
     assert metrics.message_accuracy(prediction, message).tolist() == [1.0, 0.0]
 
 
+def test_message_loss_mse_and_bce() -> None:
+    prediction = torch.tensor([[2.0, -2.0]])
+    message = torch.tensor([[1.0, 0.0]])
+    mse = metrics.message_loss(prediction, message, "mse")
+    bce = metrics.message_loss(prediction, message, "bce")
+    assert mse.item() == pytest.approx(torch.nn.functional.mse_loss(prediction, message).item())
+    assert bce.item() == pytest.approx(torch.nn.functional.binary_cross_entropy_with_logits(prediction, message).item())
+
+
+def test_message_loss_rejects_unknown_type() -> None:
+    prediction = torch.zeros(1, 2)
+    message = torch.zeros(1, 2)
+    with pytest.raises(ValueError, match="unknown message_loss_type"):
+        metrics.message_loss(prediction, message, "l1")
+
+
 def test_psnr_is_high_for_identical_images() -> None:
     image = torch.rand(2, 3, 32, 32)
     values = metrics.psnr(image, image)
