@@ -1,3 +1,4 @@
+import io
 import logging
 import shlex
 import sys
@@ -7,11 +8,14 @@ from pathlib import Path
 
 import mlflow
 import mlflow.pyfunc
+import mlflow.tracing.attachments as attachments
 import structlog
 import torch
 import torch.utils.data
 from omegaconf import DictConfig, OmegaConf
 
+import watermarking.demo.messages as messages
+import watermarking.demo.model as demo_model
 import watermarking.train.attacks as attacks_module
 import watermarking.train.dataset as dataset_module
 import watermarking.train.metrics as metrics
@@ -268,19 +272,44 @@ def _train_step(
                 "batch_size": int(image.shape[0]),
             }
         )
+        message_bits = message[0].detach()
+        input_image = _image_attachment(image[0])
+        bytes_in = messages.bits_to_hex(message_bits)
+        text_in = messages.bits_to_text(message_bits)
         with mlflow.start_span(name="encoder") as encoder_span:
+            encoder_span.set_inputs(
+                {
+                    "image": input_image,
+                    "bytes_in": bytes_in,
+                    "text_in": text_in,
+                }
+            )
             diff = encoder(image, message)
             watermarked = (image + diff).clamp(0.0, 1.0)
-            encoder_span.set_inputs({"batch_size": int(image.shape[0])})
-            encoder_span.set_outputs({"diff_abs_mean": float(diff.detach().abs().mean())})
+            watermarked_image = _image_attachment(watermarked[0])
+            encoder_span.set_outputs(
+                {
+                    "image": watermarked_image,
+                    "diff_abs_mean": float(diff.detach().abs().mean()),
+                }
+            )
         with mlflow.start_span(name="attack") as attack_span:
+            attack_span.set_inputs({"image": watermarked_image})
             attacked = attacks.apply(watermarked)
-            attack_span.set_inputs({"batch_size": int(watermarked.shape[0])})
-            attack_span.set_outputs({"batch_size": int(attacked.shape[0])})
+            attacked_image = _image_attachment(attacked[0])
+            attack_span.set_outputs({"image": attacked_image})
         with mlflow.start_span(name="decoder") as decoder_span:
+            decoder_span.set_inputs({"image": attacked_image})
             prediction = decoder(attacked)
-            decoder_span.set_inputs({"batch_size": int(attacked.shape[0])})
-            decoder_span.set_outputs({"batch_size": int(prediction.shape[0])})
+            recovered_bits = messages.threshold_bits(prediction[0].detach())
+            bytes_out = messages.bits_to_hex(recovered_bits)
+            text_out = messages.bits_to_text(recovered_bits)
+            decoder_span.set_outputs(
+                {
+                    "bytes_out": bytes_out,
+                    "text_out": text_out,
+                }
+            )
         with mlflow.start_span(name="loss") as loss_span:
             message_loss = metrics.message_loss(prediction, message, message_loss_type)
             image_loss = metrics.image_loss(image, watermarked, diff, image_loss_type)
@@ -319,6 +348,12 @@ def _train_step(
             }
         )
         return outputs
+
+
+def _image_attachment(image: torch.Tensor) -> attachments.Attachment:
+    buffer = io.BytesIO()
+    demo_model.tensor_to_pil(image).save(buffer, format="PNG")
+    return attachments.Attachment(content_type="image/png", content_bytes=buffer.getvalue())
 
 
 def _run_train_step(

@@ -52,9 +52,11 @@ def test_crop_preserves_shape() -> None:
 
 
 def test_rotate_preserves_shape() -> None:
+    torch.manual_seed(0)
     image = torch.rand(3, 32, 32)
-    output = attacks.rotate(image, degrees=15.0)
+    output = attacks.rotate(image)
     assert output.shape == image.shape
+    assert any(torch.equal(output, image.rot90(k, dims=(-2, -1))) for k in (1, 2, 3))
 
 
 def test_blur_preserves_shape() -> None:

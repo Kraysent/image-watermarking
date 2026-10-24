@@ -76,24 +76,9 @@ def crop(image: torch.Tensor, *, scale: float) -> torch.Tensor:
     return _resize(cropped, height, width)
 
 
-def rotate(image: torch.Tensor, *, degrees: float) -> torch.Tensor:
-    angle = math.radians(float(degrees))
-    cos_a = math.cos(angle)
-    sin_a = math.sin(angle)
-    theta = torch.tensor(
-        [[cos_a, -sin_a, 0.0], [sin_a, cos_a, 0.0]],
-        device=image.device,
-        dtype=image.dtype,
-    ).unsqueeze(0)
-    grid = functional.affine_grid(theta, size=(1, *image.shape), align_corners=False)
-    rotated = functional.grid_sample(
-        image.unsqueeze(0),
-        grid,
-        mode="bilinear",
-        padding_mode="border",
-        align_corners=False,
-    )
-    return rotated.squeeze(0).clamp(0.0, 1.0)
+def rotate(image: torch.Tensor) -> torch.Tensor:
+    k = int(torch.randint(1, 4, (1,)).item())
+    return image.rot90(k, dims=(-2, -1))
 
 
 def blur(image: torch.Tensor, *, radius: float) -> torch.Tensor:
