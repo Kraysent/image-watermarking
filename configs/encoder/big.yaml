@@ -1,2 +1,0 @@
-channels: [64, 128, 128]
-residual_scale: 0.5

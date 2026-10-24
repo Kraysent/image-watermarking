@@ -28,7 +28,7 @@ class DemoSession:
 
     @property
     def residual_scale(self) -> float:
-        return float(self.train_cfg.encoder.residual_scale)
+        return float(self.train_cfg.model.encoder.residual_scale)
 
 
 def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSession:
@@ -43,12 +43,12 @@ def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSessi
 
     encoder = models.Encoder(
         message_bits=train_cfg.data.message_bits,
-        channels=list(train_cfg.encoder.channels),
-        residual_scale=train_cfg.encoder.residual_scale,
+        channels=list(train_cfg.model.encoder.channels),
+        residual_scale=train_cfg.model.encoder.residual_scale,
     ).to(torch_device)
     decoder = models.Decoder(
         message_bits=train_cfg.data.message_bits,
-        channels=list(train_cfg.decoder.channels),
+        channels=list(train_cfg.model.decoder.channels),
     ).to(torch_device)
     encoder.load_state_dict(checkpoint["encoder"])
     decoder.load_state_dict(checkpoint["decoder"])

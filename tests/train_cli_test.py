@@ -37,18 +37,18 @@ def test_hydra_overrides_compose() -> None:
         cfg = hydra.compose(
             config_name="config",
             overrides=[
-                "encoder.channels=[32,64]",
-                "decoder.channels=[8]",
+                "model.encoder.channels=[32,64]",
+                "model.decoder.channels=[8]",
                 "train.epochs=3",
-                "loss.w_img=2.5",
-                "loss.image_loss_type=ssim",
+                "train.loss.w_img=2.5",
+                "train.loss.image_loss_type=ssim",
             ],
         )
     assert cfg.train.epochs == 3
-    assert list(cfg.encoder.channels) == [32, 64]
-    assert list(cfg.decoder.channels) == [8]
-    assert cfg.loss.w_img == 2.5
-    assert cfg.loss.image_loss_type == "ssim"
+    assert list(cfg.model.encoder.channels) == [32, 64]
+    assert list(cfg.model.decoder.channels) == [8]
+    assert cfg.train.loss.w_img == 2.5
+    assert cfg.train.loss.image_loss_type == "ssim"
 
 
 def test_hydra_test_config_compose() -> None:
@@ -87,8 +87,8 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
             "data.image_size=32",
             "data.message_bits=4",
             "data.batch_size=1",
-            "encoder.channels=[4,8]",
-            "decoder.channels=[4]",
+            "model.encoder.channels=[4,8]",
+            "model.decoder.channels=[4]",
             "train.max_steps=1",
             "train.device=cpu",
             f"train.checkpoint_dir={checkpoint_dir}",

@@ -1,10 +1,7 @@
 defaults:
   - data: dev
-  - encoder: small
-  - decoder: small
+  - model: small
   - train: dev
-  - loss: dev
-  - eval: dev
   - demo: dev
   - mlflow: dev
   - _self_

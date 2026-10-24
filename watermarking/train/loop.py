@@ -84,19 +84,18 @@ def train(cfg: DictConfig) -> str:
 
         encoder = models.Encoder(
             message_bits=cfg.data.message_bits,
-            channels=list(cfg.encoder.channels),
-            residual_scale=cfg.encoder.residual_scale,
+            channels=list(cfg.model.encoder.channels),
+            residual_scale=cfg.model.encoder.residual_scale,
         ).to(device)
         decoder = models.Decoder(
             message_bits=cfg.data.message_bits,
-            channels=list(cfg.decoder.channels),
+            channels=list(cfg.model.decoder.channels),
         ).to(device)
         optimizer = torch.optim.Adam(
             list(encoder.parameters()) + list(decoder.parameters()),
             lr=cfg.train.lr,
         )
-        train_attacks = attacks_module.build_attack_pipeline(cfg.train.get("attacks"))
-        eval_attacks = attacks_module.build_attack_pipeline(cfg.eval.get("attacks"))
+        attacks = attacks_module.build_attack_pipeline(cfg.train.get("attacks"))
 
         max_steps = cfg.train.max_steps
         checkpoint_every = cfg.train.checkpoint_every
@@ -128,11 +127,11 @@ def train(cfg: DictConfig) -> str:
                         optimizer=optimizer,
                         image=image,
                         message=message,
-                        attacks=train_attacks,
-                        w_msg=float(cfg.loss.w_msg),
-                        w_img=float(cfg.loss.w_img),
-                        message_loss_type=cfg.loss.message_loss_type,
-                        image_loss_type=cfg.loss.image_loss_type,
+                        attacks=attacks,
+                        w_msg=float(cfg.train.loss.w_msg),
+                        w_img=float(cfg.train.loss.w_img),
+                        message_loss_type=cfg.train.loss.message_loss_type,
+                        image_loss_type=cfg.train.loss.image_loss_type,
                         trace=should_trace,
                         epoch=epoch + 1,
                         global_step=global_step + 1,
@@ -162,11 +161,11 @@ def train(cfg: DictConfig) -> str:
                     decoder=decoder,
                     loader=eval_loader,
                     device=device,
-                    w_msg=float(cfg.loss.w_msg),
-                    w_img=float(cfg.loss.w_img),
-                    message_loss_type=cfg.loss.message_loss_type,
-                    image_loss_type=cfg.loss.image_loss_type,
-                    attacks=eval_attacks,
+                    w_msg=float(cfg.train.loss.w_msg),
+                    w_img=float(cfg.train.loss.w_img),
+                    message_loss_type=cfg.train.loss.message_loss_type,
+                    image_loss_type=cfg.train.loss.image_loss_type,
+                    attacks=attacks,
                 )
                 mlflow.log_metrics(
                     {

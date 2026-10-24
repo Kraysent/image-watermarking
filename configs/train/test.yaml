@@ -6,4 +6,9 @@ max_steps: null
 checkpoint_dir: outputs/checkpoints
 checkpoint_every: null
 trace_sample_pct: 0.0
+loss:
+  w_msg: 2.0
+  w_img: 1.0
+  message_loss_type: bce
+  image_loss_type: mse
 attacks: []
