@@ -1,6 +1,6 @@
 dataset_path: data/dataset.parquet
 images_dir: data/raw
-image_size: 64
+image_size: 128
 message_bits: 32
 batch_size: 32
 num_workers: 0
