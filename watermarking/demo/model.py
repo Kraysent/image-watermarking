@@ -47,6 +47,7 @@ def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSessi
         message_bits=train_cfg.data.message_bits,
         channels=list(train_cfg.model.encoder.channels),
         residual_scale=train_cfg.model.encoder.residual_scale,
+        message_layer=int(train_cfg.model.encoder.get("message_layer", 0)),
     ).to(torch_device)
     decoder = models.Decoder(
         message_bits=train_cfg.data.message_bits,

@@ -51,13 +51,12 @@ def test_hydra_overrides_compose() -> None:
     assert cfg.train.loss.image_loss_type == "ssim"
 
 
-def test_hydra_test_config_compose() -> None:
+def test_hydra_deep_model_compose() -> None:
     with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
-        cfg = hydra.compose(config_name="test")
-    assert cfg.data.image_size == 32
-    assert cfg.data.message_bits == 4
-    assert cfg.train.device == "mps"
-    assert cfg.mlflow.experiment_name == "watermarking-test"
+        cfg = hydra.compose(config_name="config", overrides=["model=deep"])
+    assert list(cfg.model.encoder.channels) == [64, 64, 64, 64]
+    assert cfg.model.encoder.message_layer == 3
+    assert list(cfg.model.decoder.channels) == [64, 64, 64, 64, 64]
 
 
 def test_train_runs_one_step(tmp_path: Path) -> None:

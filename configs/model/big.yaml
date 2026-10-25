@@ -1,5 +1,6 @@
 encoder:
   channels: [64, 128, 128]
+  message_layer: 0
   residual_scale: 0.5
 decoder:
   channels: [64, 128, 256]

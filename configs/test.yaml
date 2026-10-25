@@ -1,7 +1,0 @@
-defaults:
-  - data: test
-  - model: test
-  - train: test
-  - demo: dev
-  - mlflow: test
-  - _self_

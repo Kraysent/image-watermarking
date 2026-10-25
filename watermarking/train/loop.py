@@ -104,6 +104,7 @@ def _train_run(
         message_bits=cfg.data.message_bits,
         channels=list(cfg.model.encoder.channels),
         residual_scale=cfg.model.encoder.residual_scale,
+        message_layer=int(cfg.model.encoder.get("message_layer", 0)),
     ).to(device)
     decoder = models.Decoder(
         message_bits=cfg.data.message_bits,

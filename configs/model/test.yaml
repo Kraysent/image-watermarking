@@ -1,5 +1,0 @@
-encoder:
-  channels: [16, 32]
-  residual_scale: 0.5
-decoder:
-  channels: [16]

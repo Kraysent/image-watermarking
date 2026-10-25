@@ -36,6 +36,27 @@ def test_encoder_decoder_multi_layer_shapes() -> None:
     assert prediction.shape == message.shape
 
 
+def test_encoder_message_layer_shapes() -> None:
+    message_bits = 8
+    image = torch.rand(2, 3, 32, 32)
+    message = torch.randint(0, 2, (2, message_bits), dtype=torch.float32)
+    channels = [8, 16, 16, 16]
+
+    encoder = models.Encoder(
+        message_bits=message_bits,
+        channels=channels,
+        residual_scale=0.1,
+        message_layer=3,
+    )
+    decoder = models.Decoder(message_bits=message_bits, channels=channels)
+
+    diff = encoder(image, message)
+    prediction = decoder((image + diff).clamp(0.0, 1.0))
+
+    assert diff.shape == image.shape
+    assert prediction.shape == message.shape
+
+
 def test_training_step_reduces_graph() -> None:
     message_bits = 4
     image = torch.rand(2, 3, 16, 16)
