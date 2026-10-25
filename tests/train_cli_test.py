@@ -56,7 +56,7 @@ def test_hydra_test_config_compose() -> None:
         cfg = hydra.compose(config_name="test")
     assert cfg.data.image_size == 32
     assert cfg.data.message_bits == 4
-    assert cfg.train.device == "cpu"
+    assert cfg.train.device == "mps"
     assert cfg.mlflow.experiment_name == "watermarking-test"
 
 
