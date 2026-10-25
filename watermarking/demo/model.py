@@ -7,6 +7,8 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 
 import watermarking.demo.messages as messages
+import watermarking.train.checkpoints as checkpoints
+import watermarking.train.images as images
 import watermarking.train.models as models
 
 
@@ -33,7 +35,7 @@ class DemoSession:
 
 def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSession:
     run_dir = checkpoint_dir / run_id
-    checkpoint_path = _latest_checkpoint_path(run_dir)
+    checkpoint_path = checkpoints.latest_checkpoint_path(run_dir)
     if checkpoint_path is None:
         raise FileNotFoundError(f"checkpoint not found in: {run_dir}")
 
@@ -63,33 +65,16 @@ def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSessi
     )
 
 
-def _latest_checkpoint_path(run_dir: Path) -> Path | None:
-    checkpoints = list(run_dir.glob("epoch_*.pt"))
-    if not checkpoints:
-        return None
-
-    def epoch_number(path: Path) -> int:
-        return int(path.stem.removeprefix("epoch_"))
-
-    return max(checkpoints, key=epoch_number)
-
-
 def pil_to_tensor(image: PIL.Image.Image, image_size: int) -> torch.Tensor:
     rgb = image.convert("RGB").resize((image_size, image_size), PIL.Image.Resampling.BILINEAR)
     array = np.asarray(rgb, dtype=np.float32) / 255.0
     return torch.from_numpy(array).permute(2, 0, 1)
 
 
-def tensor_to_pil(image: torch.Tensor) -> PIL.Image.Image:
-    array = image.detach().cpu().permute(1, 2, 0).numpy()
-    uint8 = (array * 255.0).round().clip(0, 255).astype(np.uint8)
-    return PIL.Image.fromarray(uint8)
-
-
-def side_by_side(*images: torch.Tensor) -> PIL.Image.Image:
+def side_by_side(*tensors: torch.Tensor) -> PIL.Image.Image:
     arrays = [
         (image.detach().cpu().permute(1, 2, 0).numpy() * 255.0).round().clip(0, 255).astype(np.uint8)
-        for image in images
+        for image in tensors
     ]
     return PIL.Image.fromarray(np.concatenate(arrays, axis=1))
 
@@ -112,7 +97,7 @@ def embed(
         amplified = (0.5 + diff / (2.0 * session.residual_scale)).clamp(0.0, 1.0)
 
     grid = side_by_side(image_batch[0], watermarked[0], amplified[0])
-    watermarked_image = tensor_to_pil(watermarked[0])
+    watermarked_image = images.tensor_to_pil(watermarked[0])
     recovered = messages.threshold_bits(prediction[0])
     accuracy = messages.bit_accuracy(prediction[0], message)
     return (

@@ -15,9 +15,10 @@ import torch.utils.data
 from omegaconf import DictConfig, OmegaConf
 
 import watermarking.demo.messages as messages
-import watermarking.demo.model as demo_model
 import watermarking.train.attacks as attacks_module
+import watermarking.train.checkpoints as checkpoints
 import watermarking.train.dataset as dataset_module
+import watermarking.train.images as images
 import watermarking.train.metrics as metrics
 import watermarking.train.models as models
 import watermarking.train.system_metrics as system_metrics_module
@@ -30,7 +31,7 @@ class WatermarkCheckpointModel(mlflow.pyfunc.PythonModel):
         raise NotImplementedError("load artifacts['checkpoint'] with torch.load")
 
 
-def train(cfg: DictConfig) -> str:
+def train(cfg: DictConfig, resume_run_id: str | None = None) -> str:
     _configure_logging()
     _prepare_output_dirs(cfg)
     mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
@@ -41,19 +42,26 @@ def train(cfg: DictConfig) -> str:
         system_monitor = system_metrics_module.create_system_metrics_monitor(run_id)
         system_monitor.start()
         try:
-            return _train_run(cfg=cfg, run=run, run_id=run_id)
+            return _train_run(cfg=cfg, run=run, run_id=run_id, resume_run_id=resume_run_id)
         finally:
             system_monitor.finish()
 
 
-def _train_run(*, cfg: DictConfig, run: mlflow.ActiveRun, run_id: str) -> str:
+def _train_run(
+    *,
+    cfg: DictConfig,
+    run: mlflow.ActiveRun,
+    run_id: str,
+    resume_run_id: str | None = None,
+) -> str:
     log.info("run started", run_id=run_id)
-    mlflow.log_params(
-        {
-            **_flatten_params(OmegaConf.to_container(cfg, resolve=True)),
-            "command": shlex.join(sys.argv),
-        }
-    )
+    params = {
+        **_flatten_params(OmegaConf.to_container(cfg, resolve=True)),
+        "command": shlex.join(sys.argv),
+    }
+    if resume_run_id is not None:
+        params["resumed_from"] = resume_run_id
+    mlflow.log_params(params)
 
     torch.manual_seed(cfg.train.seed)
     device = torch.device(cfg.train.device)
@@ -119,14 +127,23 @@ def _train_run(*, cfg: DictConfig, run: mlflow.ActiveRun, run_id: str) -> str:
         early_stop_patience = int(early_stop_patience)
     global_step = 0
     finished_epoch = 0
+    if resume_run_id is not None:
+        finished_epoch, global_step = _load_checkpoint(
+            resume_run_id=resume_run_id,
+            checkpoint_dir=Path(cfg.train.checkpoint_dir),
+            encoder=encoder,
+            decoder=decoder,
+            optimizer=optimizer,
+        )
     total_epochs = int(cfg.train.max_epochs)
+    start_epoch = finished_epoch
     checkpoint_dir = Path(cfg.train.checkpoint_dir) / run_id
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
     train_start = time.perf_counter()
     eval_loss_history: list[float] = []
 
     try:
-        for epoch in range(total_epochs):
+        for epoch in range(start_epoch, total_epochs):
             encoder.train()
             decoder.train()
             epoch_message_loss = 0.0
@@ -198,8 +215,9 @@ def _train_run(*, cfg: DictConfig, run: mlflow.ActiveRun, run_id: str) -> str:
                 step=finished_epoch,
             )
             elapsed = time.perf_counter() - train_start
+            epochs_this_run = finished_epoch - start_epoch
             remaining_epochs = total_epochs - finished_epoch
-            eta = (elapsed / finished_epoch) * remaining_epochs
+            eta = (elapsed / epochs_this_run) * remaining_epochs
             log.info(
                 "epoch finished",
                 epoch=finished_epoch,
@@ -386,7 +404,7 @@ def _train_step(
 
 def _image_attachment(image: torch.Tensor) -> attachments.Attachment:
     buffer = io.BytesIO()
-    demo_model.tensor_to_pil(image).save(buffer, format="PNG")
+    images.tensor_to_pil(image).save(buffer, format="PNG")
     return attachments.Attachment(content_type="image/png", content_bytes=buffer.getvalue())
 
 
@@ -420,6 +438,34 @@ def _run_train_step(
         float(loss.detach()),
         float(bit_accuracy.detach()),
     )
+
+
+def _load_checkpoint(
+    *,
+    resume_run_id: str,
+    checkpoint_dir: Path,
+    encoder: models.Encoder,
+    decoder: models.Decoder,
+    optimizer: torch.optim.Optimizer,
+) -> tuple[int, int]:
+    run_dir = checkpoint_dir / resume_run_id
+    checkpoint_path = checkpoints.latest_checkpoint_path(run_dir)
+    if checkpoint_path is None:
+        raise FileNotFoundError(f"checkpoint not found in: {run_dir}")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    encoder.load_state_dict(checkpoint["encoder"])
+    decoder.load_state_dict(checkpoint["decoder"])
+    optimizer.load_state_dict(checkpoint["optimizer"])
+    finished_epoch = int(checkpoint["epoch"])
+    global_step = int(checkpoint["global_step"])
+    log.info(
+        "checkpoint loaded",
+        checkpoint=str(checkpoint_path.resolve()),
+        resumed_from=resume_run_id,
+        epoch=finished_epoch,
+        global_step=global_step,
+    )
+    return finished_epoch, global_step
 
 
 def _save_checkpoint(
