@@ -8,7 +8,7 @@ checkpoint_every: null
 trace_sample_pct: 0.0
 early_stop:
   patience: 20
-  min_delta_pct: 0.01
+  min_delta_pct: 1.0
 loss:
   w_msg: 2.0
   w_img: 1.0

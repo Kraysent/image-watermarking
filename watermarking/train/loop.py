@@ -100,9 +100,11 @@ def train(cfg: DictConfig) -> str:
         max_steps = cfg.train.max_steps
         checkpoint_every = cfg.train.checkpoint_every
         trace_sample_pct = float(cfg.train.get("trace_sample_pct", 0.0))
+        trace_sample_prob = trace_sample_pct / 100.0
         early_stop_cfg = cfg.train.get("early_stop")
         early_stop_patience = None if early_stop_cfg is None else early_stop_cfg.get("patience")
         early_stop_min_delta_pct = 0.0 if early_stop_cfg is None else float(early_stop_cfg.get("min_delta_pct", 0.0))
+        early_stop_min_epoch = 0 if early_stop_cfg is None else int(early_stop_cfg.get("min_epoch", 0))
         if early_stop_patience is not None:
             early_stop_patience = int(early_stop_patience)
         global_step = 0
@@ -126,7 +128,7 @@ def train(cfg: DictConfig) -> str:
                 for image, message in train_loader:
                     image = image.to(device)
                     message = message.to(device)
-                    should_trace = trace_sample_pct > 0.0 and torch.rand(()).item() < trace_sample_pct
+                    should_trace = trace_sample_prob > 0.0 and torch.rand(()).item() < trace_sample_prob
                     message_loss_value, image_loss_value, total_loss_value, bit_accuracy_value = _train_step(
                         encoder=encoder,
                         decoder=decoder,
@@ -212,7 +214,7 @@ def train(cfg: DictConfig) -> str:
                 if max_steps is not None and global_step >= max_steps:
                     break
 
-                if _loss_plateaued(
+                if finished_epoch >= early_stop_min_epoch and _loss_plateaued(
                     eval_loss_history,
                     patience=early_stop_patience,
                     min_delta_pct=early_stop_min_delta_pct,
@@ -222,6 +224,7 @@ def train(cfg: DictConfig) -> str:
                         epoch=finished_epoch,
                         patience=early_stop_patience,
                         min_delta_pct=early_stop_min_delta_pct,
+                        min_epoch=early_stop_min_epoch,
                         eval_loss=round(eval_loss, 6),
                     )
                     break
@@ -548,7 +551,7 @@ def _loss_plateaued(
         return False
     window = losses[-patience:]
     mean_loss = sum(window) / len(window)
-    return max(window) - min(window) <= min_delta_pct * abs(mean_loss)
+    return max(window) - min(window) <= (min_delta_pct / 100.0) * abs(mean_loss)
 
 
 def _format_duration(seconds: float) -> str:

@@ -1,5 +1,5 @@
 encoder:
-  channels: [64, 128]
+  channels: [64, 128, 128]
   residual_scale: 0.5
 decoder:
-  channels: [64, 128, 128]
+  channels: [64, 128, 256]
