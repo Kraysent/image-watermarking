@@ -3,3 +3,4 @@ client_cert_path: null
 server_cert_path: null
 experiment_name: watermarking
 prefect_api_url: http://127.0.0.1:4200/api
+huggingface_repo: kraysent/image-watermarking

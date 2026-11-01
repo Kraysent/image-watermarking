@@ -2,6 +2,7 @@ import click
 
 import watermarking.data.cli as data_cli
 import watermarking.demo.cli as demo_cli
+import watermarking.hub.cli as hub_cli
 import watermarking.train.cli as train_cli
 
 
@@ -13,3 +14,4 @@ def cli() -> None:
 cli.add_command(data_cli.ingest)
 cli.add_command(train_cli.train)
 cli.add_command(demo_cli.demo)
+cli.add_command(hub_cli.push)

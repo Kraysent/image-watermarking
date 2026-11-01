@@ -19,6 +19,7 @@ dependencies = [
     "psutil>=7.0.0",
     "structlog>=26.1.0",
     "torch>=2.14.1",
+    "huggingface-hub>=1.16.1",
 ]
 
 [project.scripts]

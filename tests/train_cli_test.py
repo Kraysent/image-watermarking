@@ -27,6 +27,7 @@ def test_cli_help_lists_train() -> None:
     assert result.exit_code == 0
     assert "train" in result.output
     assert "demo" in result.output
+    assert "push" in result.output
 
 
 def test_cli_has_no_eval_command() -> None:
@@ -67,6 +68,7 @@ def test_hydra_tracking_local_compose() -> None:
         cfg = hydra.compose(config_name="config", overrides=["tracking=local"])
     assert cfg.tracking.tracking_uri == "http://127.0.0.1:5001"
     assert cfg.tracking.prefect_api_url == "http://127.0.0.1:4200/api"
+    assert cfg.tracking.huggingface_repo is None
 
 
 def test_hydra_tracking_remote_compose() -> None:
