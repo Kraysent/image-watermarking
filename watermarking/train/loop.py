@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import mlflow
+import mlflow.environment_variables as mlflow_env
 import mlflow.pyfunc
 import mlflow.tracing.attachments as attachments
 import structlog
@@ -31,18 +32,48 @@ class WatermarkCheckpointModel(mlflow.pyfunc.PythonModel):
         raise NotImplementedError("load artifacts['checkpoint'] with torch.load")
 
 
-def train(cfg: DictConfig, resume_run_id: str | None = None) -> str:
-    _configure_logging()
-    _prepare_output_dirs(cfg)
-    mlflow.set_tracking_uri(cfg.mlflow.tracking_uri)
-    _ensure_experiment(cfg.mlflow.experiment_name, Path(cfg.mlflow.artifact_root))
+def cfg_from_checkpoint(cfg: DictConfig, run_id: str) -> DictConfig:
+    run_dir = Path(cfg.train.checkpoint_dir) / run_id
+    checkpoint_path = checkpoints.latest_checkpoint_path(run_dir)
+    if checkpoint_path is None:
+        raise FileNotFoundError(f"checkpoint not found in: {run_dir}")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    saved = OmegaConf.create(checkpoint["config"])
+    saved.train.checkpoint_dir = cfg.train.checkpoint_dir
+    return saved
 
-    with mlflow.start_run(log_system_metrics=False) as run:
+
+def train(
+    cfg: DictConfig,
+    resume_run_id: str | None = None,
+    continue_run_id: str | None = None,
+    continue_epochs: int | None = None,
+) -> str:
+    if continue_run_id is not None and continue_epochs is None:
+        raise ValueError("continue_epochs is required when continue_run_id is set")
+    if continue_run_id is not None and resume_run_id is not None:
+        raise ValueError("resume_run_id and continue_run_id are mutually exclusive")
+
+    _configure_logging()
+    _configure_tracking(cfg)
+    tracking_uri = str(cfg.tracking.tracking_uri)
+    artifact_root = _artifact_root(cfg)
+    _prepare_output_dirs(cfg, tracking_uri, artifact_root)
+    mlflow.set_tracking_uri(tracking_uri)
+    _ensure_experiment(cfg.tracking.experiment_name, artifact_root)
+
+    with mlflow.start_run(run_id=continue_run_id, log_system_metrics=False) as run:
         run_id = run.info.run_id
         system_monitor = system_metrics_module.create_system_metrics_monitor(run_id)
         system_monitor.start()
         try:
-            return _train_run(cfg=cfg, run=run, run_id=run_id, resume_run_id=resume_run_id)
+            return _train_run(
+                cfg=cfg,
+                run=run,
+                run_id=run_id,
+                resume_run_id=resume_run_id or continue_run_id,
+                continue_epochs=continue_epochs,
+            )
         finally:
             system_monitor.finish()
 
@@ -53,15 +84,17 @@ def _train_run(
     run: mlflow.ActiveRun,
     run_id: str,
     resume_run_id: str | None = None,
+    continue_epochs: int | None = None,
 ) -> str:
     log.info("run started", run_id=run_id)
-    params = {
-        **_flatten_params(OmegaConf.to_container(cfg, resolve=True)),
-        "command": shlex.join(sys.argv),
-    }
-    if resume_run_id is not None:
-        params["resumed_from"] = resume_run_id
-    mlflow.log_params(params)
+    if continue_epochs is None:
+        params = {
+            **_flatten_params(OmegaConf.to_container(cfg, resolve=True)),
+            "command": shlex.join(sys.argv),
+        }
+        if resume_run_id is not None:
+            params["resumed_from"] = resume_run_id
+        mlflow.log_params(params)
 
     torch.manual_seed(cfg.train.seed)
     device = torch.device(cfg.train.device)
@@ -116,7 +149,7 @@ def _train_run(
     )
     attacks = attacks_module.build_attack_pipeline(cfg.train.get("attacks"))
 
-    max_steps = cfg.train.max_steps
+    max_steps = None if continue_epochs is not None else cfg.train.max_steps
     checkpoint_every = cfg.train.checkpoint_every
     trace_sample_pct = float(cfg.train.get("trace_sample_pct", 0.0))
     trace_sample_prob = trace_sample_pct / 100.0
@@ -136,7 +169,12 @@ def _train_run(
             decoder=decoder,
             optimizer=optimizer,
         )
-    total_epochs = int(cfg.train.max_epochs)
+    if continue_epochs is not None:
+        total_epochs = finished_epoch + int(continue_epochs)
+        cfg.train.max_epochs = total_epochs
+        cfg.train.max_steps = None
+    else:
+        total_epochs = int(cfg.train.max_epochs)
     start_epoch = finished_epoch
     checkpoint_dir = Path(cfg.train.checkpoint_dir) / run_id
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -565,20 +603,39 @@ def _evaluate_epoch(
     }
 
 
-def _prepare_output_dirs(cfg: DictConfig) -> None:
+def _configure_tracking(cfg: DictConfig) -> None:
+    client_cert_path = cfg.tracking.get("client_cert_path")
+    if client_cert_path is not None:
+        mlflow_env.MLFLOW_TRACKING_CLIENT_CERT_PATH.set(str(client_cert_path))
+    server_cert_path = cfg.tracking.get("server_cert_path")
+    if server_cert_path is not None:
+        mlflow_env.MLFLOW_TRACKING_SERVER_CERT_PATH.set(str(server_cert_path))
+
+
+def _artifact_root(cfg: DictConfig) -> Path | None:
+    value = cfg.tracking.get("artifact_root")
+    if value is None:
+        return None
+    return Path(str(value))
+
+
+def _prepare_output_dirs(cfg: DictConfig, tracking_uri: str, artifact_root: Path | None) -> None:
     Path(cfg.train.checkpoint_dir).mkdir(parents=True, exist_ok=True)
-    Path(cfg.mlflow.artifact_root).mkdir(parents=True, exist_ok=True)
-    tracking_uri = str(cfg.mlflow.tracking_uri)
+    if artifact_root is not None:
+        artifact_root.mkdir(parents=True, exist_ok=True)
     if tracking_uri.startswith("sqlite:///"):
         Path(tracking_uri.removeprefix("sqlite:///")).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
 
 
-def _ensure_experiment(experiment_name: str, artifact_root: Path) -> None:
+def _ensure_experiment(experiment_name: str, artifact_root: Path | None) -> None:
     if mlflow.get_experiment_by_name(experiment_name) is None:
-        mlflow.create_experiment(
-            experiment_name,
-            artifact_location=str(artifact_root.resolve()),
-        )
+        if artifact_root is None:
+            mlflow.create_experiment(experiment_name)
+        else:
+            mlflow.create_experiment(
+                experiment_name,
+                artifact_location=str(artifact_root.resolve()),
+            )
     mlflow.set_experiment(experiment_name)
 
 

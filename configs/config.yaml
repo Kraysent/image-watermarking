@@ -3,5 +3,5 @@ defaults:
   - model: small
   - train: dev
   - demo: dev
-  - mlflow: dev
+  - tracking: local
   - _self_

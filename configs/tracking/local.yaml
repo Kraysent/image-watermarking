@@ -1,3 +1,5 @@
 tracking_uri: sqlite:///outputs/mlflow.db
 artifact_root: outputs/mlartifacts
+client_cert_path: null
+server_cert_path: null
 experiment_name: watermarking

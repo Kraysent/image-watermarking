@@ -75,9 +75,9 @@ def _overfit_train_args(
         "data.message_seed=0",
         f"train.checkpoint_dir={checkpoint_dir}",
         "train.early_stop=null",
-        f"mlflow.tracking_uri={tracking_uri}",
-        f"mlflow.artifact_root={artifact_root}",
-        "mlflow.experiment_name=watermarking-test",
+        f"tracking.tracking_uri={tracking_uri}",
+        f"tracking.artifact_root={artifact_root}",
+        "tracking.experiment_name=watermarking-test",
     ]
     if extra:
         args.extend(extra)

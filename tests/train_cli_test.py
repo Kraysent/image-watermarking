@@ -59,6 +59,15 @@ def test_hydra_deep_model_compose() -> None:
     assert list(cfg.model.decoder.channels) == [64, 64, 64, 64, 64]
 
 
+def test_hydra_tracking_remote_compose() -> None:
+    with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
+        cfg = hydra.compose(config_name="config", overrides=["tracking=remote"])
+    assert cfg.tracking.tracking_uri.startswith("https://")
+    assert cfg.tracking.artifact_root is None
+    assert cfg.tracking.client_cert_path is not None
+    assert cfg.tracking.server_cert_path is not None
+
+
 def test_train_runs_one_step(tmp_path: Path) -> None:
     images_dir = tmp_path / "raw"
     images_dir.mkdir(parents=True)
@@ -91,9 +100,9 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
             "train.max_steps=1",
             "train.device=cpu",
             f"train.checkpoint_dir={checkpoint_dir}",
-            f"mlflow.tracking_uri={tracking_uri}",
-            f"mlflow.artifact_root={artifact_root}",
-            "mlflow.experiment_name=test",
+            f"tracking.tracking_uri={tracking_uri}",
+            f"tracking.artifact_root={artifact_root}",
+            "tracking.experiment_name=test",
         ],
     )
     assert result.exit_code == 0, result.output
@@ -162,9 +171,9 @@ def test_train_resumes_from_run_id(tmp_path: Path) -> None:
         "train.max_steps=1",
         "train.device=cpu",
         f"train.checkpoint_dir={checkpoint_dir}",
-        f"mlflow.tracking_uri={tracking_uri}",
-        f"mlflow.artifact_root={artifact_root}",
-        "mlflow.experiment_name=test",
+        f"tracking.tracking_uri={tracking_uri}",
+        f"tracking.artifact_root={artifact_root}",
+        "tracking.experiment_name=test",
     ]
 
     runner = click.testing.CliRunner()
@@ -204,3 +213,70 @@ def test_train_resumes_from_run_id(tmp_path: Path) -> None:
     run = mlflow.get_run(new_run_id)
     assert run.data.params["resumed_from"] == source_run_id
     assert "resumed_from" not in mlflow.get_run(source_run_id).data.params
+
+
+def test_train_continues_same_run(tmp_path: Path) -> None:
+    images_dir = tmp_path / "raw"
+    images_dir.mkdir(parents=True)
+    for name in ("train.png", "test.png"):
+        PIL.Image.new("RGB", (40, 40), color=(12, 34, 56)).save(images_dir / name)
+
+    dataset_path = tmp_path / "dataset.parquet"
+    polars.DataFrame(
+        {
+            "relative_path": ["train.png", "test.png"],
+            "split": ["train", "test"],
+        }
+    ).write_parquet(dataset_path)
+    checkpoint_dir = tmp_path / "outputs" / "checkpoints"
+    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
+    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    train_args = [
+        "train",
+        f"data.dataset_path={dataset_path}",
+        f"data.images_dir={images_dir}",
+        "data.image_size=32",
+        "data.message_bits=4",
+        "data.batch_size=1",
+        "model.encoder.channels=[4,8]",
+        "model.decoder.channels=[4]",
+        "train.max_epochs=1",
+        "train.max_steps=1",
+        "train.device=cpu",
+        f"train.checkpoint_dir={checkpoint_dir}",
+        f"tracking.tracking_uri={tracking_uri}",
+        f"tracking.artifact_root={artifact_root}",
+        "tracking.experiment_name=test",
+    ]
+
+    runner = click.testing.CliRunner()
+    first = runner.invoke(cli_module.cli, train_args)
+    assert first.exit_code == 0, first.output
+    run_id = _run_id_from_output(first.output)
+    assert (checkpoint_dir / run_id / "epoch_1.pt").is_file()
+
+    continued = runner.invoke(
+        cli_module.cli,
+        [
+            "train",
+            "--continue",
+            run_id,
+            "1",
+            f"train.checkpoint_dir={checkpoint_dir}",
+        ],
+    )
+    assert continued.exit_code == 0, continued.output
+    assert _run_id_from_output(continued.output) == run_id
+
+    continued_checkpoint_path = checkpoint_dir / run_id / "epoch_2.pt"
+    assert continued_checkpoint_path.is_file()
+    continued_checkpoint = torch.load(continued_checkpoint_path, map_location="cpu", weights_only=False)
+    assert continued_checkpoint["run_id"] == run_id
+    assert continued_checkpoint["epoch"] == 2
+
+    mlflow.set_tracking_uri(tracking_uri)
+    run = mlflow.get_run(run_id)
+    assert run.info.status == "FINISHED"
+    assert "resumed_from" not in run.data.params
+    client = mlflow.tracking.MlflowClient(tracking_uri)
+    assert client.get_metric_history(run_id, "train/loss")[-1].step == 2

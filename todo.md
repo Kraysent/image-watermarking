@@ -1,3 +1,7 @@
 - arbitrary image sizes
 - release Gradio UI to Hugging Face
 - add pics to README
+- from HiDDeN paper:
+    - fix noise strength as a hyperparameter
+    - jpeg should be switched to something differentiatable?
+    - remove rotate and flip attcaks

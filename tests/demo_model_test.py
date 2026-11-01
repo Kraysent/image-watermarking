@@ -56,9 +56,9 @@ def test_embed_and_extract_roundtrip(tmp_path: Path) -> None:
             "train.max_steps=1",
             "train.device=cpu",
             f"train.checkpoint_dir={checkpoint_dir}",
-            f"mlflow.tracking_uri={tracking_uri}",
-            f"mlflow.artifact_root={artifact_root}",
-            "mlflow.experiment_name=test",
+            f"tracking.tracking_uri={tracking_uri}",
+            f"tracking.artifact_root={artifact_root}",
+            "tracking.experiment_name=test",
         ],
     )
     assert train_result.exit_code == 0, train_result.output
