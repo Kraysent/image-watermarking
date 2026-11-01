@@ -9,10 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# Local datasets
-/data/**
-!/data/**/*.dvc
-!/data/**/.gitignore
+/data/staging/
 
 # Training / experiment outputs
 /outputs/
