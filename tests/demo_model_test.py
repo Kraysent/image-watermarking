@@ -16,11 +16,11 @@ def _run_id_from_output(output: str) -> str:
     return match.group(1)
 
 
-def test_cli_help_lists_demo() -> None:
+def test_demo_without_run_id_requires_huggingface_repo() -> None:
     runner = click.testing.CliRunner()
-    result = runner.invoke(cli_module.cli, ["--help"])
-    assert result.exit_code == 0
-    assert "demo" in result.output
+    result = runner.invoke(cli_module.cli, ["demo", "tracking.huggingface_repo=null"])
+    assert result.exit_code != 0
+    assert "tracking.huggingface_repo is required" in result.output
 
 
 def test_embed_and_extract_roundtrip(tmp_path: Path, tracking_server: str) -> None:

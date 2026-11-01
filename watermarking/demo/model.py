@@ -7,6 +7,7 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 
 import watermarking.demo.messages as messages
+import watermarking.hub.pull as pull_module
 import watermarking.train.checkpoints as checkpoints
 import watermarking.train.images as images
 import watermarking.train.models as models
@@ -33,12 +34,7 @@ class DemoSession:
         return float(self.train_cfg.model.encoder.residual_scale)
 
 
-def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSession:
-    run_dir = checkpoint_dir / run_id
-    checkpoint_path = checkpoints.latest_checkpoint_path(run_dir)
-    if checkpoint_path is None:
-        raise FileNotFoundError(f"checkpoint not found in: {run_dir}")
-
+def load_session_from_checkpoint(*, checkpoint_path: Path, device: str) -> DemoSession:
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     train_cfg = OmegaConf.create(checkpoint["config"])
     torch_device = torch.device(device)
@@ -62,8 +58,21 @@ def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSessi
         decoder=decoder,
         train_cfg=train_cfg,
         device=torch_device,
-        run_id=run_id,
+        run_id=str(checkpoint["run_id"]),
     )
+
+
+def load_session(*, run_id: str, checkpoint_dir: Path, device: str) -> DemoSession:
+    run_dir = checkpoint_dir / run_id
+    checkpoint_path = checkpoints.latest_checkpoint_path(run_dir)
+    if checkpoint_path is None:
+        raise FileNotFoundError(f"checkpoint not found in: {run_dir}")
+    return load_session_from_checkpoint(checkpoint_path=checkpoint_path, device=device)
+
+
+def load_session_from_hub(*, repo_id: str, device: str) -> DemoSession:
+    checkpoint_path = pull_module.download_latest_checkpoint(repo_id)
+    return load_session_from_checkpoint(checkpoint_path=checkpoint_path, device=device)
 
 
 def pil_to_tensor(image: PIL.Image.Image, image_size: int) -> torch.Tensor:

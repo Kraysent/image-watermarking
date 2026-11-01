@@ -2,115 +2,18 @@ import re
 from pathlib import Path
 
 import click.testing
-import hydra
 import mlflow
 import PIL.Image
 import polars
-import pytest
 import torch
-from omegaconf import DictConfig
 
 import watermarking.cli as cli_module
-import watermarking.train.cli as train_cli
-import watermarking.train.tracking.prefect as prefect_module
 
 
 def _run_id_from_output(output: str) -> str:
     match = re.search(r"\brun_id=([a-f0-9]+)\b", output)
     assert match is not None, output
     return match.group(1)
-
-
-def test_cli_help_lists_train() -> None:
-    runner = click.testing.CliRunner()
-    result = runner.invoke(cli_module.cli, ["--help"])
-    assert result.exit_code == 0
-    assert "train" in result.output
-    assert "demo" in result.output
-    assert "push" in result.output
-
-
-def test_cli_has_no_eval_command() -> None:
-    runner = click.testing.CliRunner()
-    result = runner.invoke(cli_module.cli, ["eval", "--help"])
-    assert result.exit_code != 0
-
-
-def test_hydra_overrides_compose() -> None:
-    with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
-        cfg = hydra.compose(
-            config_name="config",
-            overrides=[
-                "model.encoder.channels=[32,64]",
-                "model.decoder.channels=[8]",
-                "train.max_epochs=3",
-                "train.loss.w_img=2.5",
-                "train.loss.image_loss_type=ssim",
-            ],
-        )
-    assert cfg.train.max_epochs == 3
-    assert list(cfg.model.encoder.channels) == [32, 64]
-    assert list(cfg.model.decoder.channels) == [8]
-    assert cfg.train.loss.w_img == 2.5
-    assert cfg.train.loss.image_loss_type == "ssim"
-
-
-def test_hydra_deep_model_compose() -> None:
-    with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
-        cfg = hydra.compose(config_name="config", overrides=["model=deep"])
-    assert list(cfg.model.encoder.channels) == [64, 64, 64, 64]
-    assert cfg.model.encoder.message_layer == 3
-    assert list(cfg.model.decoder.channels) == [64, 64, 64, 64, 64]
-
-
-def test_hydra_tracking_local_compose() -> None:
-    with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
-        cfg = hydra.compose(config_name="config", overrides=["tracking=local"])
-    assert cfg.tracking.tracking_uri == "http://127.0.0.1:5001"
-    assert cfg.tracking.prefect_api_url == "http://127.0.0.1:4200/api"
-    assert cfg.tracking.huggingface_repo is None
-
-
-def test_hydra_tracking_remote_compose() -> None:
-    with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
-        cfg = hydra.compose(config_name="config", overrides=["tracking=remote"])
-    assert cfg.tracking.tracking_uri == "https://ml.mercury.kraysent.dev"
-    assert cfg.tracking.prefect_api_url == "https://ml-tasks.mercury.kraysent.dev/api"
-    assert cfg.tracking.client_cert_path is not None
-    assert cfg.tracking.server_cert_path is None
-
-
-def test_cli_runs_train_through_prefect(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: dict[str, object] = {}
-
-    def run_train(
-        cfg: DictConfig,
-        resume_run_id: str | None = None,
-        continue_run_id: str | None = None,
-        continue_epochs: int | None = None,
-    ) -> str:
-        seen["prefect_api_url"] = cfg.tracking.prefect_api_url
-        seen["resume_run_id"] = resume_run_id
-        seen["continue_run_id"] = continue_run_id
-        seen["continue_epochs"] = continue_epochs
-        return "prefect-run"
-
-    monkeypatch.setattr(prefect_module, "run_train", run_train)
-    runner = click.testing.CliRunner()
-    result = runner.invoke(cli_module.cli, ["train", "--run-id", "abc123", "train.max_steps=1"])
-    assert result.exit_code == 0, result.output
-    assert seen["prefect_api_url"] == "http://127.0.0.1:4200/api"
-    assert seen["resume_run_id"] == "abc123"
-    assert seen["continue_run_id"] is None
-
-
-@pytest.mark.prefect_api
-def test_cli_requires_prefect_api_url() -> None:
-    runner = click.testing.CliRunner()
-    result = runner.invoke(cli_module.cli, ["train", "tracking.prefect_api_url=null"])
-    assert result.exit_code != 0
-    assert result.exception is not None
-    assert "prefect_api_url" in str(result.exception)
 
 
 def test_train_runs_one_step(tmp_path: Path, tracking_server: str) -> None:

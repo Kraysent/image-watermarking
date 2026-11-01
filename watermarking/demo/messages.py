@@ -70,9 +70,9 @@ def bits_to_hex(bits: torch.Tensor) -> str:
 
 
 def bit_accuracy(prediction: torch.Tensor, target: torch.Tensor) -> float:
-    predicted = threshold_bits(prediction)
-    return float((predicted == target).float().mean().item())
+    predicted = threshold_bits(prediction.detach().cpu())
+    return float((predicted == target.detach().cpu()).float().mean().item())
 
 
 def confidence(prediction: torch.Tensor) -> float:
-    return float((prediction.detach() - 0.5).abs().mean().item())
+    return float((prediction.detach().cpu() - 0.5).abs().mean().item())

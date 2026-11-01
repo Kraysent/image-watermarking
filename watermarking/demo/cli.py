@@ -17,17 +17,23 @@ CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs"
         "allow_extra_args": True,
     },
 )
-@click.option("--run-id", required=True, type=str)
+@click.option("--run-id", default=None, type=str)
 @click.option("--config-name", default="config", show_default=True)
 @click.pass_context
-def demo(ctx: click.Context, run_id: str, config_name: str) -> None:
+def demo(ctx: click.Context, run_id: str | None, config_name: str) -> None:
     with hydra.initialize_config_dir(config_dir=str(CONFIG_DIR), version_base=None):
         cfg = hydra.compose(config_name=config_name, overrides=list(ctx.args))
     click.echo(OmegaConf.to_yaml(cfg))
-    session = model_module.load_session(
-        run_id=run_id,
-        checkpoint_dir=Path(cfg.train.checkpoint_dir),
-        device=cfg.demo.device,
-    )
+    if run_id is None:
+        repo_id = cfg.tracking.get("huggingface_repo")
+        if repo_id is None:
+            raise click.UsageError("tracking.huggingface_repo is required when --run-id is omitted")
+        session = model_module.load_session_from_hub(repo_id=str(repo_id), device=cfg.demo.device)
+    else:
+        session = model_module.load_session(
+            run_id=run_id,
+            checkpoint_dir=Path(cfg.train.checkpoint_dir),
+            device=cfg.demo.device,
+        )
     app = app_module.build_app(session)
     app.launch(server_name=cfg.demo.host, server_port=cfg.demo.port)
