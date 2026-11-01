@@ -5,9 +5,10 @@ import click.testing
 import PIL.Image
 import polars
 
-import watermarking.cli as cli_module
 import watermarking.demo.app as app_module
+import watermarking.demo.cli as demo_cli
 import watermarking.demo.model as model_module
+import watermarking.train.cli as train_cli
 
 
 def _run_id_from_output(output: str) -> str:
@@ -18,7 +19,7 @@ def _run_id_from_output(output: str) -> str:
 
 def test_demo_without_run_id_requires_huggingface_repo() -> None:
     runner = click.testing.CliRunner()
-    result = runner.invoke(cli_module.cli, ["demo", "tracking.huggingface_repo=null"])
+    result = runner.invoke(demo_cli.demo, ["tracking.huggingface_repo=null"])
     assert result.exit_code != 0
     assert "tracking.huggingface_repo is required" in result.output
 
@@ -42,9 +43,8 @@ def test_embed_and_extract_roundtrip(tmp_path: Path, tracking_server: str) -> No
 
     runner = click.testing.CliRunner()
     train_result = runner.invoke(
-        cli_module.cli,
+        train_cli.train,
         [
-            "train",
             f"data.dataset_path={dataset_path}",
             f"data.images_dir={images_dir}",
             "data.image_size=32",

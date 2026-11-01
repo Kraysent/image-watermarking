@@ -4,7 +4,7 @@ import click.testing
 import PIL.Image
 import pytest
 
-import watermarking.cli as cli_module
+import watermarking.data.cli as data_cli
 import watermarking.data.synthetic as synthetic_module
 
 
@@ -29,8 +29,8 @@ def test_cli_synthetic_writes_images(tmp_path: Path) -> None:
     output_dir = tmp_path / "raw"
     runner = click.testing.CliRunner()
     result = runner.invoke(
-        cli_module.cli,
-        ["ingest", "synthetic", "--output", str(output_dir), "--count", "2", "--size", "32", "--seed", "0"],
+        data_cli.ingest,
+        ["synthetic", "--output", str(output_dir), "--count", "2", "--size", "32", "--seed", "0"],
     )
     assert result.exit_code == 0, result.output
     assert len(list(output_dir.glob("*.png"))) == 2

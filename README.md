@@ -4,4 +4,4 @@ The default dataset is just a dataset of streetfood from Kaggle but there is not
 
 Usage:
 1. Start sidecars with `make start-sidecars`
-2. Run training with `uv run watermarking train`
+2. Run training with `uv run train`

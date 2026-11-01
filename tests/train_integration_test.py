@@ -6,7 +6,8 @@ import mlflow
 import polars
 import pytest
 
-import watermarking.cli as cli_module
+import watermarking.data.cli as data_cli
+import watermarking.train.cli as train_cli
 
 
 def _run_id_from_output(output: str) -> str:
@@ -22,9 +23,8 @@ def _prepare_overfit_dataset(tmp_path: Path) -> tuple[Path, Path]:
     runner = click.testing.CliRunner()
 
     synthetic_result = runner.invoke(
-        cli_module.cli,
+        data_cli.ingest,
         [
-            "ingest",
             "synthetic",
             f"--output={images_dir}",
             "--count=2",
@@ -35,14 +35,14 @@ def _prepare_overfit_dataset(tmp_path: Path) -> tuple[Path, Path]:
     assert synthetic_result.exit_code == 0, synthetic_result.output
 
     catalog_result = runner.invoke(
-        cli_module.cli,
-        ["ingest", "catalog", f"--input={images_dir}", f"--output={catalog_path}"],
+        data_cli.ingest,
+        ["catalog", f"--input={images_dir}", f"--output={catalog_path}"],
     )
     assert catalog_result.exit_code == 0, catalog_result.output
 
     validate_result = runner.invoke(
-        cli_module.cli,
-        ["ingest", "validate", f"--input={catalog_path}"],
+        data_cli.ingest,
+        ["validate", f"--input={catalog_path}"],
     )
     assert validate_result.exit_code == 0, validate_result.output
 
@@ -66,7 +66,6 @@ def _overfit_train_args(
     extra: list[str] | None = None,
 ) -> list[str]:
     args = [
-        "train",
         "model=deep",
         f"data.dataset_path={dataset_path}",
         f"data.images_dir={images_dir}",
@@ -90,7 +89,7 @@ def test_ingest_and_train_overfits_to_near_zero_loss(tmp_path: Path, tracking_se
     runner = click.testing.CliRunner()
 
     train_result = runner.invoke(
-        cli_module.cli,
+        train_cli.train,
         _overfit_train_args(
             images_dir=images_dir,
             dataset_path=dataset_path,
@@ -119,7 +118,7 @@ def test_zero_image_loss_weight_makes_detection_trivially_perfect(tmp_path: Path
     runner = click.testing.CliRunner()
 
     train_result = runner.invoke(
-        cli_module.cli,
+        train_cli.train,
         _overfit_train_args(
             images_dir=images_dir,
             dataset_path=dataset_path,
@@ -145,7 +144,7 @@ def test_zero_message_loss_weight_collapses_to_null_diff(tmp_path: Path, trackin
     runner = click.testing.CliRunner()
 
     train_result = runner.invoke(
-        cli_module.cli,
+        train_cli.train,
         _overfit_train_args(
             images_dir=images_dir,
             dataset_path=dataset_path,

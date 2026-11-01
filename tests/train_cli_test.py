@@ -7,7 +7,7 @@ import PIL.Image
 import polars
 import torch
 
-import watermarking.cli as cli_module
+import watermarking.train.cli as train_cli
 
 
 def _run_id_from_output(output: str) -> str:
@@ -34,9 +34,8 @@ def test_train_runs_one_step(tmp_path: Path, tracking_server: str) -> None:
 
     runner = click.testing.CliRunner()
     result = runner.invoke(
-        cli_module.cli,
+        train_cli.train,
         [
-            "train",
             f"data.dataset_path={dataset_path}",
             f"data.images_dir={images_dir}",
             "data.image_size=32",
@@ -104,7 +103,6 @@ def test_train_resumes_from_run_id(tmp_path: Path, tracking_server: str) -> None
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
     tracking_uri = tracking_server
     train_args = [
-        "train",
         f"data.dataset_path={dataset_path}",
         f"data.images_dir={images_dir}",
         "data.image_size=32",
@@ -121,7 +119,7 @@ def test_train_resumes_from_run_id(tmp_path: Path, tracking_server: str) -> None
     ]
 
     runner = click.testing.CliRunner()
-    first = runner.invoke(cli_module.cli, train_args)
+    first = runner.invoke(train_cli.train, train_args)
     assert first.exit_code == 0, first.output
     source_run_id = _run_id_from_output(first.output)
     source_checkpoint = torch.load(
@@ -131,12 +129,11 @@ def test_train_resumes_from_run_id(tmp_path: Path, tracking_server: str) -> None
     )
 
     resumed = runner.invoke(
-        cli_module.cli,
+        train_cli.train,
         [
-            "train",
             "--run-id",
             source_run_id,
-            *train_args[1:],
+            *train_args,
             "train.max_epochs=2",
             "train.max_steps=2",
         ],
@@ -175,7 +172,6 @@ def test_train_continues_same_run(tmp_path: Path, tracking_server: str) -> None:
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
     tracking_uri = tracking_server
     train_args = [
-        "train",
         f"data.dataset_path={dataset_path}",
         f"data.images_dir={images_dir}",
         "data.image_size=32",
@@ -192,15 +188,14 @@ def test_train_continues_same_run(tmp_path: Path, tracking_server: str) -> None:
     ]
 
     runner = click.testing.CliRunner()
-    first = runner.invoke(cli_module.cli, train_args)
+    first = runner.invoke(train_cli.train, train_args)
     assert first.exit_code == 0, first.output
     run_id = _run_id_from_output(first.output)
     assert (checkpoint_dir / run_id / "epoch_1.pt").is_file()
 
     continued = runner.invoke(
-        cli_module.cli,
+        train_cli.train,
         [
-            "train",
             "--continue",
             run_id,
             "1",
