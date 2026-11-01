@@ -13,6 +13,7 @@ dependencies = [
     "numpy>=2.5.4",
     "nvidia-ml-py>=12.0.0",
     "pandera[polars]>=0.34.1",
+    "prefect>=3.6.0",
     "pillow>=10.0.0,<13",
     "polars>=2.0.0",
     "psutil>=7.0.0",
@@ -41,6 +42,7 @@ pythonpath = ["."]
 addopts = "-m 'not integration'"
 markers = [
     "integration: end-to-end integration tests (excluded from make check)",
+    "prefect_api: exercise the real Prefect train wrapper",
 ]
 
 [tool.ruff]

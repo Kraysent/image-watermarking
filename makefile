@@ -77,5 +77,8 @@ update-template:
 		--conflict inline \
 		--answers-file .template.yaml
 
+start-sidecars:
+	docker compose up -d
+
 ui:
 	uv run mlflow ui --backend-store-uri sqlite:///outputs/mlflow.db

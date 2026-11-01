@@ -5,6 +5,7 @@ import hydra
 from omegaconf import OmegaConf
 
 import watermarking.train.loop as loop_module
+import watermarking.train.tracking.prefect as prefect_tracking
 
 CONFIG_DIR = Path(__file__).resolve().parents[2] / "configs"
 
@@ -44,8 +45,12 @@ def train(
         continue_run_id, continue_epochs = continue_from
         cfg = loop_module.cfg_from_checkpoint(cfg, continue_run_id)
         click.echo(OmegaConf.to_yaml(cfg))
-        loop_module.train(cfg, continue_run_id=continue_run_id, continue_epochs=continue_epochs)
+        prefect_tracking.run_train(
+            cfg,
+            continue_run_id=continue_run_id,
+            continue_epochs=continue_epochs,
+        )
         return
 
     click.echo(OmegaConf.to_yaml(cfg))
-    loop_module.train(cfg, resume_run_id=run_id)
+    prefect_tracking.run_train(cfg, resume_run_id=run_id)

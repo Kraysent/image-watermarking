@@ -1,5 +1,5 @@
-tracking_uri: sqlite:///outputs/mlflow.db
-artifact_root: outputs/mlartifacts
+tracking_uri: http://127.0.0.1:5001
 client_cert_path: null
 server_cert_path: null
 experiment_name: watermarking
+prefect_api_url: http://127.0.0.1:4200/api

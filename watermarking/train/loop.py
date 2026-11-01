@@ -22,7 +22,7 @@ import watermarking.train.dataset as dataset_module
 import watermarking.train.images as images
 import watermarking.train.metrics as metrics
 import watermarking.train.models as models
-import watermarking.train.system_metrics as system_metrics_module
+import watermarking.train.tracking.system_metrics as system_metrics_module
 
 log = structlog.get_logger()
 
@@ -57,13 +57,16 @@ def train(
     _configure_logging()
     _configure_tracking(cfg)
     tracking_uri = str(cfg.tracking.tracking_uri)
-    artifact_root = _artifact_root(cfg)
-    _prepare_output_dirs(cfg, tracking_uri, artifact_root)
+    Path(cfg.train.checkpoint_dir).mkdir(parents=True, exist_ok=True)
     mlflow.set_tracking_uri(tracking_uri)
-    _ensure_experiment(cfg.tracking.experiment_name, artifact_root)
+    _ensure_experiment(cfg.tracking.experiment_name)
 
     with mlflow.start_run(run_id=continue_run_id, log_system_metrics=False) as run:
         run_id = run.info.run_id
+        print(
+            f"View MLflow run at {tracking_uri.rstrip('/')}/#/experiments/{run.info.experiment_id}/runs/{run_id}",
+            flush=True,
+        )
         system_monitor = system_metrics_module.create_system_metrics_monitor(run_id)
         system_monitor.start()
         try:
@@ -612,30 +615,9 @@ def _configure_tracking(cfg: DictConfig) -> None:
         mlflow_env.MLFLOW_TRACKING_SERVER_CERT_PATH.set(str(server_cert_path))
 
 
-def _artifact_root(cfg: DictConfig) -> Path | None:
-    value = cfg.tracking.get("artifact_root")
-    if value is None:
-        return None
-    return Path(str(value))
-
-
-def _prepare_output_dirs(cfg: DictConfig, tracking_uri: str, artifact_root: Path | None) -> None:
-    Path(cfg.train.checkpoint_dir).mkdir(parents=True, exist_ok=True)
-    if artifact_root is not None:
-        artifact_root.mkdir(parents=True, exist_ok=True)
-    if tracking_uri.startswith("sqlite:///"):
-        Path(tracking_uri.removeprefix("sqlite:///")).expanduser().resolve().parent.mkdir(parents=True, exist_ok=True)
-
-
-def _ensure_experiment(experiment_name: str, artifact_root: Path | None) -> None:
+def _ensure_experiment(experiment_name: str) -> None:
     if mlflow.get_experiment_by_name(experiment_name) is None:
-        if artifact_root is None:
-            mlflow.create_experiment(experiment_name)
-        else:
-            mlflow.create_experiment(
-                experiment_name,
-                artifact_location=str(artifact_root.resolve()),
-            )
+        mlflow.create_experiment(experiment_name)
     mlflow.set_experiment(experiment_name)
 
 

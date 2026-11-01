@@ -6,10 +6,13 @@ import hydra
 import mlflow
 import PIL.Image
 import polars
+import pytest
 import torch
+from omegaconf import DictConfig
 
 import watermarking.cli as cli_module
 import watermarking.train.cli as train_cli
+import watermarking.train.tracking.prefect as prefect_module
 
 
 def _run_id_from_output(output: str) -> str:
@@ -59,16 +62,56 @@ def test_hydra_deep_model_compose() -> None:
     assert list(cfg.model.decoder.channels) == [64, 64, 64, 64, 64]
 
 
+def test_hydra_tracking_local_compose() -> None:
+    with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
+        cfg = hydra.compose(config_name="config", overrides=["tracking=local"])
+    assert cfg.tracking.tracking_uri == "http://127.0.0.1:5001"
+    assert cfg.tracking.prefect_api_url == "http://127.0.0.1:4200/api"
+
+
 def test_hydra_tracking_remote_compose() -> None:
     with hydra.initialize_config_dir(config_dir=str(train_cli.CONFIG_DIR), version_base=None):
         cfg = hydra.compose(config_name="config", overrides=["tracking=remote"])
-    assert cfg.tracking.tracking_uri.startswith("https://")
-    assert cfg.tracking.artifact_root is None
+    assert cfg.tracking.tracking_uri == "https://ml.mercury.kraysent.dev"
+    assert cfg.tracking.prefect_api_url == "https://ml-tasks.mercury.kraysent.dev/api"
     assert cfg.tracking.client_cert_path is not None
-    assert cfg.tracking.server_cert_path is not None
+    assert cfg.tracking.server_cert_path is None
 
 
-def test_train_runs_one_step(tmp_path: Path) -> None:
+def test_cli_runs_train_through_prefect(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def run_train(
+        cfg: DictConfig,
+        resume_run_id: str | None = None,
+        continue_run_id: str | None = None,
+        continue_epochs: int | None = None,
+    ) -> str:
+        seen["prefect_api_url"] = cfg.tracking.prefect_api_url
+        seen["resume_run_id"] = resume_run_id
+        seen["continue_run_id"] = continue_run_id
+        seen["continue_epochs"] = continue_epochs
+        return "prefect-run"
+
+    monkeypatch.setattr(prefect_module, "run_train", run_train)
+    runner = click.testing.CliRunner()
+    result = runner.invoke(cli_module.cli, ["train", "--run-id", "abc123", "train.max_steps=1"])
+    assert result.exit_code == 0, result.output
+    assert seen["prefect_api_url"] == "http://127.0.0.1:4200/api"
+    assert seen["resume_run_id"] == "abc123"
+    assert seen["continue_run_id"] is None
+
+
+@pytest.mark.prefect_api
+def test_cli_requires_prefect_api_url() -> None:
+    runner = click.testing.CliRunner()
+    result = runner.invoke(cli_module.cli, ["train", "tracking.prefect_api_url=null"])
+    assert result.exit_code != 0
+    assert result.exception is not None
+    assert "prefect_api_url" in str(result.exception)
+
+
+def test_train_runs_one_step(tmp_path: Path, tracking_server: str) -> None:
     images_dir = tmp_path / "raw"
     images_dir.mkdir(parents=True)
     for name in ("train.png", "test.png"):
@@ -82,8 +125,7 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
         }
     ).write_parquet(dataset_path)
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
-    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
-    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    tracking_uri = tracking_server
 
     runner = click.testing.CliRunner()
     result = runner.invoke(
@@ -101,7 +143,6 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
             "train.device=cpu",
             f"train.checkpoint_dir={checkpoint_dir}",
             f"tracking.tracking_uri={tracking_uri}",
-            f"tracking.artifact_root={artifact_root}",
             "tracking.experiment_name=test",
         ],
     )
@@ -142,7 +183,7 @@ def test_train_runs_one_step(tmp_path: Path) -> None:
     assert versions[0].run_id == run_id
 
 
-def test_train_resumes_from_run_id(tmp_path: Path) -> None:
+def test_train_resumes_from_run_id(tmp_path: Path, tracking_server: str) -> None:
     images_dir = tmp_path / "raw"
     images_dir.mkdir(parents=True)
     for name in ("train.png", "test.png"):
@@ -156,8 +197,7 @@ def test_train_resumes_from_run_id(tmp_path: Path) -> None:
         }
     ).write_parquet(dataset_path)
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
-    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
-    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    tracking_uri = tracking_server
     train_args = [
         "train",
         f"data.dataset_path={dataset_path}",
@@ -172,7 +212,6 @@ def test_train_resumes_from_run_id(tmp_path: Path) -> None:
         "train.device=cpu",
         f"train.checkpoint_dir={checkpoint_dir}",
         f"tracking.tracking_uri={tracking_uri}",
-        f"tracking.artifact_root={artifact_root}",
         "tracking.experiment_name=test",
     ]
 
@@ -215,7 +254,7 @@ def test_train_resumes_from_run_id(tmp_path: Path) -> None:
     assert "resumed_from" not in mlflow.get_run(source_run_id).data.params
 
 
-def test_train_continues_same_run(tmp_path: Path) -> None:
+def test_train_continues_same_run(tmp_path: Path, tracking_server: str) -> None:
     images_dir = tmp_path / "raw"
     images_dir.mkdir(parents=True)
     for name in ("train.png", "test.png"):
@@ -229,8 +268,7 @@ def test_train_continues_same_run(tmp_path: Path) -> None:
         }
     ).write_parquet(dataset_path)
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
-    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
-    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    tracking_uri = tracking_server
     train_args = [
         "train",
         f"data.dataset_path={dataset_path}",
@@ -245,7 +283,6 @@ def test_train_continues_same_run(tmp_path: Path) -> None:
         "train.device=cpu",
         f"train.checkpoint_dir={checkpoint_dir}",
         f"tracking.tracking_uri={tracking_uri}",
-        f"tracking.artifact_root={artifact_root}",
         "tracking.experiment_name=test",
     ]
 

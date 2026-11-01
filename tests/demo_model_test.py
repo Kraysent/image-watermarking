@@ -23,7 +23,7 @@ def test_cli_help_lists_demo() -> None:
     assert "demo" in result.output
 
 
-def test_embed_and_extract_roundtrip(tmp_path: Path) -> None:
+def test_embed_and_extract_roundtrip(tmp_path: Path, tracking_server: str) -> None:
     images_dir = tmp_path / "raw"
     images_dir.mkdir(parents=True)
     for name in ("train.png", "test.png"):
@@ -38,8 +38,7 @@ def test_embed_and_extract_roundtrip(tmp_path: Path) -> None:
     ).write_parquet(dataset_path)
 
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
-    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
-    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    tracking_uri = tracking_server
 
     runner = click.testing.CliRunner()
     train_result = runner.invoke(
@@ -57,7 +56,6 @@ def test_embed_and_extract_roundtrip(tmp_path: Path) -> None:
             "train.device=cpu",
             f"train.checkpoint_dir={checkpoint_dir}",
             f"tracking.tracking_uri={tracking_uri}",
-            f"tracking.artifact_root={artifact_root}",
             "tracking.experiment_name=test",
         ],
     )

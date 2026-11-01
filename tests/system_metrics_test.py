@@ -1,6 +1,6 @@
 from unittest import mock
 
-import watermarking.train.system_metrics as system_metrics_module
+import watermarking.train.tracking.system_metrics as system_metrics_module
 
 _SAMPLE_POWERMETRICS = (
     "GPU HW active residency:  97.50% ("

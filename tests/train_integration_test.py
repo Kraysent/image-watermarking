@@ -63,7 +63,6 @@ def _overfit_train_args(
     dataset_path: Path,
     checkpoint_dir: Path,
     tracking_uri: str,
-    artifact_root: Path,
     extra: list[str] | None = None,
 ) -> list[str]:
     args = [
@@ -76,7 +75,6 @@ def _overfit_train_args(
         f"train.checkpoint_dir={checkpoint_dir}",
         "train.early_stop=null",
         f"tracking.tracking_uri={tracking_uri}",
-        f"tracking.artifact_root={artifact_root}",
         "tracking.experiment_name=watermarking-test",
     ]
     if extra:
@@ -85,11 +83,10 @@ def _overfit_train_args(
 
 
 @pytest.mark.integration
-def test_ingest_and_train_overfits_to_near_zero_loss(tmp_path: Path) -> None:
+def test_ingest_and_train_overfits_to_near_zero_loss(tmp_path: Path, tracking_server: str) -> None:
     images_dir, dataset_path = _prepare_overfit_dataset(tmp_path)
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
-    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
-    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    tracking_uri = tracking_server
     runner = click.testing.CliRunner()
 
     train_result = runner.invoke(
@@ -99,7 +96,6 @@ def test_ingest_and_train_overfits_to_near_zero_loss(tmp_path: Path) -> None:
             dataset_path=dataset_path,
             checkpoint_dir=checkpoint_dir,
             tracking_uri=tracking_uri,
-            artifact_root=artifact_root,
         ),
     )
     assert train_result.exit_code == 0, train_result.output
@@ -116,11 +112,10 @@ def test_ingest_and_train_overfits_to_near_zero_loss(tmp_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_zero_image_loss_weight_makes_detection_trivially_perfect(tmp_path: Path) -> None:
+def test_zero_image_loss_weight_makes_detection_trivially_perfect(tmp_path: Path, tracking_server: str) -> None:
     images_dir, dataset_path = _prepare_overfit_dataset(tmp_path)
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
-    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
-    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    tracking_uri = tracking_server
     runner = click.testing.CliRunner()
 
     train_result = runner.invoke(
@@ -130,7 +125,6 @@ def test_zero_image_loss_weight_makes_detection_trivially_perfect(tmp_path: Path
             dataset_path=dataset_path,
             checkpoint_dir=checkpoint_dir,
             tracking_uri=tracking_uri,
-            artifact_root=artifact_root,
             extra=["train.loss.w_img=0"],
         ),
     )
@@ -144,11 +138,10 @@ def test_zero_image_loss_weight_makes_detection_trivially_perfect(tmp_path: Path
 
 
 @pytest.mark.integration
-def test_zero_message_loss_weight_collapses_to_null_diff(tmp_path: Path) -> None:
+def test_zero_message_loss_weight_collapses_to_null_diff(tmp_path: Path, tracking_server: str) -> None:
     images_dir, dataset_path = _prepare_overfit_dataset(tmp_path)
     checkpoint_dir = tmp_path / "outputs" / "checkpoints"
-    tracking_uri = f"sqlite:///{tmp_path / 'outputs' / 'mlflow.db'}"
-    artifact_root = tmp_path / "outputs" / "mlartifacts"
+    tracking_uri = tracking_server
     runner = click.testing.CliRunner()
 
     train_result = runner.invoke(
@@ -158,7 +151,6 @@ def test_zero_message_loss_weight_collapses_to_null_diff(tmp_path: Path) -> None
             dataset_path=dataset_path,
             checkpoint_dir=checkpoint_dir,
             tracking_uri=tracking_uri,
-            artifact_root=artifact_root,
             extra=["train.loss.w_msg=0"],
         ),
     )
